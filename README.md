@@ -97,13 +97,7 @@ sba-capital-watch/
 4. `src/transform.py` creates analytical views from `sql/views.sql`.
 5. `app/streamlit_app.py` serves the dashboard using SQL queries against PostgreSQL.
 
-## Deliverables
 
-- Working Python ETL pipeline
-- PostgreSQL analytical data model
-- Streamlit dashboard
-- Analysis report in [Analysis.pdf](Analysis.pdf)
-- Recruiter summary in [docs/techforce_brief.md](docs/techforce_brief.md)
 
 ## Running Locally
 
