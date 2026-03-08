@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
 from pathlib import Path
 from typing import Any
+from urllib import error, request
 
 import pandas as pd
 import streamlit as st
@@ -14,15 +17,36 @@ from sqlalchemy.engine import Engine
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ALL_OPTION = "All"
+OPENAI_API_URL = "https://api.openai.com/v1/responses"
+ALLOWED_VIEWS: dict[str, str] = {
+    "vw_state_funding": (
+        "Columns: borrower_state, total_loans, total_funding, average_loan_size, "
+        "total_jobs_supported"
+    ),
+    "vw_industry_funding": (
+        "Columns: naics_code, naics_description, total_loans, total_funding, "
+        "average_loan_size, total_jobs_supported"
+    ),
+    "vw_loan_status_summary": (
+        "Columns: loan_status, total_loans, total_funding, total_charge_off_amount"
+    ),
+    "vw_jobs_per_dollar": (
+        "Columns: total_jobs_supported, total_funding, jobs_per_dollar"
+    ),
+}
+SUGGESTED_QUESTIONS = [
+    "Which states received the most SBA funding?",
+    "Which industries had the highest total funding?",
+    "What loan statuses are most common?",
+    "How many jobs are supported per dollar overall?",
+]
 
 
-def get_secret_database_url() -> str | None:
-    """Read a database URL from Streamlit secrets when deployed."""
+def get_secret_value(key: str) -> str | None:
+    """Read a secret from Streamlit secrets when deployed."""
     try:
-        if "DATABASE_URL" in st.secrets:
-            return str(st.secrets["DATABASE_URL"])
-        if "database" in st.secrets and "url" in st.secrets["database"]:
-            return str(st.secrets["database"]["url"])
+        if key in st.secrets:
+            return str(st.secrets[key])
     except Exception:
         return None
 
@@ -31,7 +55,7 @@ def get_secret_database_url() -> str | None:
 
 def get_database_url() -> str:
     """Read the database URL from Streamlit secrets or the environment."""
-    secret_database_url = get_secret_database_url()
+    secret_database_url = get_secret_value("DATABASE_URL")
     if secret_database_url:
         database_url = secret_database_url
     else:
@@ -44,6 +68,26 @@ def get_database_url() -> str:
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
     return database_url
+
+
+def get_openai_api_key() -> str | None:
+    """Read the OpenAI API key from Streamlit secrets or the environment."""
+    secret_api_key = get_secret_value("OPENAI_API_KEY")
+    if secret_api_key:
+        return secret_api_key
+
+    load_dotenv(PROJECT_ROOT / ".env")
+    return os.getenv("OPENAI_API_KEY")
+
+
+def get_openai_model() -> str:
+    """Read the configured OpenAI model, with a stable default."""
+    secret_model = get_secret_value("OPENAI_MODEL")
+    if secret_model:
+        return secret_model
+
+    load_dotenv(PROJECT_ROOT / ".env")
+    return os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
 
 @st.cache_resource(show_spinner=False)
@@ -213,8 +257,274 @@ def render_pie_chart(df: pd.DataFrame) -> None:
                 ],
             },
         },
-        use_container_width=True,
+        width="stretch",
     )
+
+
+def extract_response_text(response_json: dict[str, Any]) -> str:
+    """Extract assistant text from an OpenAI Responses API payload."""
+    output_parts: list[str] = []
+    for item in response_json.get("output", []):
+        if item.get("type") != "message":
+            continue
+        for content in item.get("content", []):
+            if content.get("type") == "output_text":
+                output_parts.append(content.get("text", ""))
+
+    return "\n".join(part for part in output_parts if part).strip()
+
+
+def normalize_json_text(response_text: str) -> str:
+    """Strip markdown fences from model output before JSON parsing."""
+    normalized_text = response_text.strip()
+    if normalized_text.startswith("```"):
+        normalized_text = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", normalized_text)
+        normalized_text = re.sub(r"\s*```$", "", normalized_text)
+    return normalized_text.strip()
+
+
+def call_openai_json(prompt: str, api_key: str, model: str) -> dict[str, Any]:
+    """Call the OpenAI Responses API and parse JSON output."""
+    payload = {
+        "model": model,
+        "input": prompt,
+        "text": {"format": {"type": "text"}},
+    }
+    request_data = json.dumps(payload).encode("utf-8")
+    http_request = request.Request(
+        OPENAI_API_URL,
+        data=request_data,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(http_request, timeout=60) as response:
+            response_json = json.loads(response.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"OpenAI API request failed: {exc.code} {body}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"OpenAI API request failed: {exc.reason}") from exc
+
+    response_text = extract_response_text(response_json)
+    if not response_text:
+        raise RuntimeError("The model returned an empty response.")
+
+    normalized_text = normalize_json_text(response_text)
+    try:
+        return json.loads(normalized_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Could not parse model response as JSON: {response_text}") from exc
+
+
+def build_sql_generation_prompt(question: str) -> str:
+    """Build the prompt for SQL generation against the analytical views."""
+    view_descriptions = "\n".join(
+        f"- {view_name}: {description}" for view_name, description in ALLOWED_VIEWS.items()
+    )
+    allowed_views = ", ".join(ALLOWED_VIEWS.keys())
+    return f"""
+You are a PostgreSQL analytics assistant for SBA Capital Watch.
+
+Use only these views:
+{view_descriptions}
+
+Rules:
+- Return valid JSON only.
+- Output keys must be: can_answer, sql, answer_title, chart_type, notes.
+- chart_type must be one of: table, bar, pie, metric.
+- Only write read-only SQL using SELECT or WITH.
+- Use only these relations: {allowed_views}.
+- Never query the raw loans table.
+- Never use INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, GRANT, COPY, or information_schema.
+- Prefer ORDER BY and LIMIT 20 for ranked lists unless the question clearly needs a single metric.
+- If the question cannot be answered from the allowed views, set can_answer to false and sql to an empty string.
+
+User question:
+{question}
+""".strip()
+
+
+def validate_generated_sql(sql: str) -> str:
+    """Validate that generated SQL is read-only and limited to allowed views."""
+    normalized_sql = sql.strip().rstrip(";").strip()
+    lowered_sql = normalized_sql.lower()
+
+    if not normalized_sql:
+        raise ValueError("The model did not return a SQL query.")
+    if not (lowered_sql.startswith("select") or lowered_sql.startswith("with")):
+        raise ValueError("Only SELECT queries are allowed.")
+    if ";" in normalized_sql:
+        raise ValueError("Only a single SQL statement is allowed.")
+
+    blocked_patterns = [
+        r"\binsert\b",
+        r"\bupdate\b",
+        r"\bdelete\b",
+        r"\bdrop\b",
+        r"\balter\b",
+        r"\bcreate\b",
+        r"\bgrant\b",
+        r"\bcopy\b",
+        r"\btruncate\b",
+        r"\binformation_schema\b",
+        r"\bpg_catalog\b",
+        r"\bloans\b",
+    ]
+    for pattern in blocked_patterns:
+        if re.search(pattern, lowered_sql):
+            raise ValueError("The generated SQL references a blocked command or table.")
+
+    referenced_relations = {
+        match.group(1)
+        for match in re.finditer(r"\b(?:from|join)\s+([a-zA-Z_][a-zA-Z0-9_]*)", lowered_sql)
+    }
+    if not referenced_relations:
+        raise ValueError("The generated SQL does not reference any allowed analytical view.")
+
+    disallowed_relations = referenced_relations.difference(ALLOWED_VIEWS)
+    if disallowed_relations:
+        raise ValueError(
+            "The generated SQL referenced disallowed relations: "
+            + ", ".join(sorted(disallowed_relations))
+        )
+
+    return normalized_sql
+
+
+def summarize_result_preview(df: pd.DataFrame) -> str:
+    """Create a short deterministic summary for tabular results."""
+    if df.empty:
+        return "The query ran successfully but returned no rows."
+
+    if len(df.columns) == 1 and len(df) == 1:
+        column_name = str(df.columns[0])
+        return f"{column_name}: {df.iloc[0, 0]}"
+
+    preview_rows = df.head(3).to_dict(orient="records")
+    return f"Returned {len(df):,} row(s). Top rows: {preview_rows}"
+
+
+def initialize_chat_state() -> None:
+    """Initialize Streamlit session state for the chat experience."""
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = []
+
+
+def run_data_chat(question: str) -> dict[str, Any]:
+    """Generate SQL from a natural-language question and execute it safely."""
+    api_key = get_openai_api_key()
+    if not api_key:
+        raise EnvironmentError("OPENAI_API_KEY is not set.")
+
+    model = get_openai_model()
+    prompt = build_sql_generation_prompt(question)
+    response_payload = call_openai_json(prompt=prompt, api_key=api_key, model=model)
+
+    if not response_payload.get("can_answer", False):
+        return {
+            "question": question,
+            "sql": "",
+            "answer_title": response_payload.get("answer_title", "Question not supported"),
+            "notes": response_payload.get(
+                "notes",
+                "This question could not be answered from the allowed analytical views.",
+            ),
+            "result_df": pd.DataFrame(),
+            "chart_type": "table",
+        }
+
+    validated_sql = validate_generated_sql(str(response_payload.get("sql", "")))
+    result_df = read_sql(validated_sql)
+    return {
+        "question": question,
+        "sql": validated_sql,
+        "answer_title": response_payload.get("answer_title", "Ask the Data"),
+        "notes": response_payload.get("notes", summarize_result_preview(result_df)),
+        "result_df": result_df,
+        "chart_type": response_payload.get("chart_type", "table"),
+    }
+
+
+def render_chat_result(result: dict[str, Any]) -> None:
+    """Render a chat response with SQL and result output."""
+    st.markdown(f"**{result['answer_title']}**")
+    st.write(result["notes"])
+
+    if result["sql"]:
+        st.code(result["sql"], language="sql")
+
+    result_df: pd.DataFrame = result["result_df"]
+    if result_df.empty:
+        return
+
+    if result["chart_type"] == "bar" and len(result_df.columns) >= 2:
+        chart_df = result_df.set_index(result_df.columns[0])
+        st.bar_chart(chart_df[result_df.columns[1]], width="stretch")
+    elif result["chart_type"] == "pie" and len(result_df.columns) >= 2:
+        render_pie_chart(
+            pd.DataFrame(
+                {
+                    "loan_status": result_df.iloc[:, 0].astype(str),
+                    "total_loans": pd.to_numeric(result_df.iloc[:, 1], errors="coerce"),
+                }
+            )
+        )
+    elif result["chart_type"] == "metric" and len(result_df.columns) == 1 and len(result_df) == 1:
+        st.metric(str(result_df.columns[0]), str(result_df.iloc[0, 0]))
+
+    st.dataframe(result_df, width="stretch", hide_index=True)
+
+
+def render_ask_the_data() -> None:
+    """Render the OpenAI-backed chat interface."""
+    st.subheader("Ask the Data")
+    st.caption("Natural-language questions are converted into safe SQL against analytical views only.")
+
+    api_key = get_openai_api_key()
+    if not api_key:
+        st.info("Add OPENAI_API_KEY to your local .env or Streamlit secrets to enable chat.")
+        return
+
+    initialize_chat_state()
+
+    suggestion_columns = st.columns(len(SUGGESTED_QUESTIONS))
+    for index, question in enumerate(SUGGESTED_QUESTIONS):
+        if suggestion_columns[index].button(question, key=f"suggested-question-{index}"):
+            st.session_state["pending_question"] = question
+
+    pending_question = st.session_state.pop("pending_question", None)
+    typed_question = st.chat_input("Ask a question about the SBA lending data")
+    question = pending_question or typed_question
+
+    for message in st.session_state.chat_messages:
+        with st.chat_message(message["role"]):
+            if message["role"] == "user":
+                st.write(message["content"])
+            else:
+                render_chat_result(message["payload"])
+
+    if not question:
+        return
+
+    st.session_state.chat_messages.append({"role": "user", "content": question})
+    with st.chat_message("user"):
+        st.write(question)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Querying analytical views..."):
+            try:
+                result = run_data_chat(question)
+            except Exception as exc:
+                st.error(str(exc))
+                return
+
+        render_chat_result(result)
+        st.session_state.chat_messages.append({"role": "assistant", "payload": result})
 
 
 def render_dashboard() -> None:
@@ -271,7 +581,7 @@ def render_dashboard() -> None:
         st.info("No state funding results for the selected filters.")
     else:
         chart_df = state_funding_df.set_index("borrower_state")
-        st.bar_chart(chart_df["total_funding"], use_container_width=True)
+        st.bar_chart(chart_df["total_funding"], width="stretch")
 
     st.subheader("Industry Analysis")
     if industry_df.empty:
@@ -279,10 +589,10 @@ def render_dashboard() -> None:
     else:
         display_df = industry_df.copy()
         display_df["total_funding"] = display_df["total_funding"].map(format_currency)
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width="stretch", hide_index=True)
         st.bar_chart(
             industry_df.set_index("naics_code")["total_funding"],
-            use_container_width=True,
+            width="stretch",
         )
 
     st.subheader("Loan Status")
@@ -290,6 +600,8 @@ def render_dashboard() -> None:
         st.info("No loan status results for the selected filters.")
     else:
         render_pie_chart(loan_status_df)
+
+    render_ask_the_data()
 
 
 if __name__ == "__main__":
