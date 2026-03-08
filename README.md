@@ -8,7 +8,7 @@ The repo takes two public SBA loan extracts, cleans them into one working datase
 
 ## What This Project Covers
 
-- SBA 7(a) and 504 FOIA loan data
+- SBA 7(a) and 504 FOIA loan data https://data.sba.gov/dataset/7-a-504-foia
 - raw file inspection and schema checks
 - cleaning and standardization in Python
 - PostgreSQL loading and analytical views
@@ -24,8 +24,6 @@ This project uses two public SBA FOIA CSV files:
 They belong in `data/raw/`. The pipeline reads them, creates small preview files for inspection, and writes one cleaned output to `data/processed/sba_loans_clean.csv`.
 
 ## Why The Structure Looks Like This
-
-I kept the project split into a few small layers so each step has a clear job:
 
 - `src/ingest.py`
   Checks the raw files, prints columns and missingness, and saves preview CSVs.
@@ -54,29 +52,62 @@ Second, industry dependence matters. A high loan count is one thing, but heavy d
 
 Third, charge-offs matter because they are one of the clearest signs of stress in the portfolio. They are not the whole risk story, but they are a solid starting point for asking which sectors or business types appear more fragile.
 
-Fourth, jobs-per-dollar is a rough efficiency lens. It is not perfect and it should not be treated as a final verdict on impact, but it is useful for comparing how much employment support is reported relative to funded dollars.
-
-The broader point is simple: build a clean baseline, then ask better questions from that baseline.
-
-## Resources Built In This Repo
-
-The main resources created for this project are:
-
-- a raw-data inspection step with preview exports
-- a cleaned, analysis-ready CSV
-- a PostgreSQL schema for the unified loan table
-- reusable SQL views for recurring analysis
-- a Streamlit dashboard with filters for state, year, and industry
-
-The most important output is not any single chart. It is the fact that the same underlying data can now be checked at every stage, from raw CSV to cleaned file to SQL view to dashboard.
-
 ## Project Questions
 
 These are the three questions the project is built around:
 
 1. Which states receive the most SBA funding?
-2. Which industries rely most on SBA-backed loans?
-3. Which sectors show the strongest signs of charge-off risk?
+States
+California: $38.82B
+Texas: $22.61B
+Florida: $17.77B
+New York: $10.24B
+Georgia: $9.74B
+Illinois: $8.60B
+Ohio: $7.95B
+Colorado: $7.32B
+Washington: $6.94B
+North Carolina: $6.67B
+California is clearly the leader by a wide margin.
+
+Industries
+Hotels (except Casino Hotels) and Motels: $17.75B
+Full-Service Restaurants: $8.64B
+Limited-Service Restaurants: $5.65B
+Child Day Care Services: $5.11B
+Offices of Dentists: $4.79B
+Offices of Physicians: $3.77B
+By loan count, the heaviest users are:
+
+Full-Service Restaurants: 16,355 loans
+Limited-Service Restaurants: 11,929
+Hotels and Motels: 10,146
+Fitness and Recreational Sports Centers: 7,666
+Child Day Care Services: 7,485
+
+
+ Which industries rely most on SBA-backed loans?
+ 
+Hotels (except Casino Hotels) and Motels: about $17.75B
+Full-Service Restaurants: about $8.64B
+Limited-Service Restaurants: about $5.65B
+Child Day Care Services: about $5.11B
+Offices of Dentists: about $4.79B
+Offices of Physicians: about $3.77B
+ 
+ Which sectors show the strongest signs of charge-off risk?
+
+ Accommodation and Food Services: 4.12% charge-off rate, about $1.65B charged off
+Arts, Entertainment, and Recreation: 3.31%
+Manufacturing: 2.94%
+Real Estate and Rental and Leasing: 2.42%
+Retail Trade: 2.36%
+
+Accommodation and Food Services: $1.65B charged off, 4.12% of funded dollars
+Arts, Entertainment, and Recreation: 3.31% charge-off rate
+Manufacturing: 2.94%
+Real Estate and Rental and Leasing: 2.42%
+Retail Trade: 2.36%
 
 ## Running The Project
 
@@ -113,3 +144,7 @@ streamlit run app/streamlit_app.py
 ## Author
 
 Mazen Zwin
+Codex | Open AI was used to help consult, generate code to help extract data , anaylsis was done by me!
+
+
+I LOVE AMERICA!!!!
