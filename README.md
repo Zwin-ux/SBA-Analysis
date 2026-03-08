@@ -141,10 +141,9 @@ streamlit run app/streamlit_app.py
 - The processed CSV output is also ignored so the repo stays lightweight and reproducible.
 - If the current shell still points to the Windows Store `python` stub after installation, open a fresh terminal or use `.venv\Scripts\python.exe`.
 
-## Author
 
-Mazen Zwin
+
+
 Codex | Open AI was used to help consult, generate code to help extract data , anaylsis was done by me!
 
 
-I LOVE AMERICA!!!!
