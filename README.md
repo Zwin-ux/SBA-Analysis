@@ -23,13 +23,13 @@ This repo is organized to show both the engineering side and the analytical side
 - Created SQL views for state funding, industry funding, loan status, and jobs-per-dollar analysis
 - Built a Streamlit dashboard with interactive filters for state, year, and industry
 
-## Business Questions
+##  Questions I asked before  that require this type of analysis
 
 1. Which states receive the most SBA funding?
 2. Which industries rely most on SBA-backed loans?
 3. Which sectors show the strongest signs of charge-off risk?
 
-## Key Findings
+## Key Findings worth nothing!!!!
 
 Using the combined cleaned dataset:
 
