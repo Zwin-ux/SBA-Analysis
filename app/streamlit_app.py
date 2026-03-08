@@ -10,6 +10,7 @@ from typing import Any
 from urllib import error, request
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
@@ -18,6 +19,17 @@ from sqlalchemy.engine import Engine
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ALL_OPTION = "All"
 OPENAI_API_URL = "https://api.openai.com/v1/responses"
+ACCENT_COLOR = "#0f766e"
+HIGHLIGHT_COLOR = "#d97706"
+CARD_BACKGROUND = "#f7fafc"
+PLOT_COLOR_SEQUENCE = [
+    "#0f766e",
+    "#1d4ed8",
+    "#d97706",
+    "#0f172a",
+    "#4f46e5",
+    "#059669",
+]
 ALLOWED_VIEWS: dict[str, str] = {
     "vw_state_funding": (
         "Columns: borrower_state, total_loans, total_funding, average_loan_size, "
@@ -167,7 +179,8 @@ def fetch_overview(where_clause: str, params: dict[str, Any]) -> pd.DataFrame:
         SELECT
             COUNT(*) AS total_loans,
             SUM(COALESCE(loan_amount, 0)) AS total_funding,
-            AVG(loan_amount) AS average_loan_size
+            AVG(loan_amount) AS average_loan_size,
+            SUM(COALESCE(jobs_supported, 0)) AS total_jobs_supported
         FROM loans
         {where_clause}
         """,
@@ -228,6 +241,191 @@ def fetch_loan_status(where_clause: str, params: dict[str, Any]) -> pd.DataFrame
     )
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_dataset_scope() -> pd.DataFrame:
+    """Return dataset scope metadata for the top-of-page context note."""
+    return read_sql(
+        """
+        SELECT
+            COUNT(*) AS total_loans,
+            MIN(approval_fiscal_year) AS min_year,
+            MAX(approval_fiscal_year) AS max_year,
+            MAX(as_of_date) AS latest_as_of_date
+        FROM loans
+        """
+    )
+
+
+def build_sector_case_sql() -> str:
+    """Map NAICS prefixes into broad business sectors for risk analysis."""
+    return """
+        CASE
+            WHEN naics_code IS NULL THEN 'Unknown'
+            WHEN LEFT(naics_code, 2) = '11' THEN 'Agriculture, Forestry, Fishing and Hunting'
+            WHEN LEFT(naics_code, 2) = '21' THEN 'Mining, Quarrying, and Oil and Gas Extraction'
+            WHEN LEFT(naics_code, 2) = '22' THEN 'Utilities'
+            WHEN LEFT(naics_code, 2) = '23' THEN 'Construction'
+            WHEN LEFT(naics_code, 2) = '31'
+              OR LEFT(naics_code, 2) = '32'
+              OR LEFT(naics_code, 2) = '33' THEN 'Manufacturing'
+            WHEN LEFT(naics_code, 2) = '42' THEN 'Wholesale Trade'
+            WHEN LEFT(naics_code, 2) = '44'
+              OR LEFT(naics_code, 2) = '45' THEN 'Retail Trade'
+            WHEN LEFT(naics_code, 2) = '48'
+              OR LEFT(naics_code, 2) = '49' THEN 'Transportation and Warehousing'
+            WHEN LEFT(naics_code, 2) = '51' THEN 'Information'
+            WHEN LEFT(naics_code, 2) = '52' THEN 'Finance and Insurance'
+            WHEN LEFT(naics_code, 2) = '53' THEN 'Real Estate and Rental and Leasing'
+            WHEN LEFT(naics_code, 2) = '54' THEN 'Professional, Scientific, and Technical Services'
+            WHEN LEFT(naics_code, 2) = '55' THEN 'Management of Companies and Enterprises'
+            WHEN LEFT(naics_code, 2) = '56' THEN 'Administrative and Support Services'
+            WHEN LEFT(naics_code, 2) = '61' THEN 'Educational Services'
+            WHEN LEFT(naics_code, 2) = '62' THEN 'Health Care and Social Assistance'
+            WHEN LEFT(naics_code, 2) = '71' THEN 'Arts, Entertainment, and Recreation'
+            WHEN LEFT(naics_code, 2) = '72' THEN 'Accommodation and Food Services'
+            WHEN LEFT(naics_code, 2) = '81' THEN 'Other Services'
+            WHEN LEFT(naics_code, 2) = '92' THEN 'Public Administration'
+            ELSE 'Other / Unclassified'
+        END
+    """
+
+
+def fetch_charge_off_rate_by_sector(where_clause: str, params: dict[str, Any]) -> pd.DataFrame:
+    """Return broad sector charge-off rates ranked by severity."""
+    sector_case = build_sector_case_sql()
+    return read_sql(
+        f"""
+        SELECT
+            {sector_case} AS sector,
+            COUNT(*) AS total_loans,
+            SUM(COALESCE(loan_amount, 0)) AS total_funding,
+            SUM(COALESCE(charge_off_amount, 0)) AS total_charge_off_amount,
+            CASE
+                WHEN SUM(COALESCE(loan_amount, 0)) = 0 THEN 0
+                ELSE SUM(COALESCE(charge_off_amount, 0)) / SUM(COALESCE(loan_amount, 0))
+            END AS charge_off_rate
+        FROM loans
+        {where_clause}
+        GROUP BY 1
+        HAVING SUM(COALESCE(loan_amount, 0)) >= 50000000
+        ORDER BY charge_off_rate DESC, total_charge_off_amount DESC
+        LIMIT 10
+        """,
+        params=params,
+    )
+
+
+def fetch_average_loan_by_state(where_clause: str, params: dict[str, Any]) -> pd.DataFrame:
+    """Return top states ranked by average loan size."""
+    return read_sql(
+        f"""
+        SELECT
+            borrower_state,
+            COUNT(*) AS total_loans,
+            AVG(loan_amount) AS average_loan_size,
+            SUM(COALESCE(loan_amount, 0)) AS total_funding
+        FROM loans
+        {where_clause}
+        {'AND' if where_clause else 'WHERE'} borrower_state IS NOT NULL
+        GROUP BY borrower_state
+        HAVING COUNT(*) >= 250
+        ORDER BY average_loan_size DESC
+        LIMIT 10
+        """,
+        params=params,
+    )
+
+
+def fetch_guarantee_share_by_industry(where_clause: str, params: dict[str, Any]) -> pd.DataFrame:
+    """Return industries with the highest SBA guarantee share."""
+    return read_sql(
+        f"""
+        SELECT
+            naics_code,
+            COALESCE(MAX(naics_description), 'Unknown') AS naics_description,
+            COUNT(*) AS total_loans,
+            SUM(COALESCE(loan_amount, 0)) AS total_funding,
+            SUM(COALESCE(sba_guaranteed_approval, 0)) AS guaranteed_funding,
+            CASE
+                WHEN SUM(COALESCE(loan_amount, 0)) = 0 THEN 0
+                ELSE SUM(COALESCE(sba_guaranteed_approval, 0)) / SUM(COALESCE(loan_amount, 0))
+            END AS guarantee_share
+        FROM loans
+        {where_clause}
+        {'AND' if where_clause else 'WHERE'} naics_code IS NOT NULL
+        GROUP BY naics_code
+        HAVING COUNT(*) >= 100
+        ORDER BY guarantee_share DESC, total_funding DESC
+        LIMIT 10
+        """,
+        params=params,
+    )
+
+
+def fetch_top_lenders(where_clause: str, params: dict[str, Any]) -> pd.DataFrame:
+    """Return lenders ranked by total SBA funding."""
+    return read_sql(
+        f"""
+        SELECT
+            lender_name,
+            COUNT(*) AS total_loans,
+            SUM(COALESCE(loan_amount, 0)) AS total_funding,
+            AVG(loan_amount) AS average_loan_size
+        FROM loans
+        {where_clause}
+        {'AND' if where_clause else 'WHERE'} lender_name IS NOT NULL
+        GROUP BY lender_name
+        HAVING COUNT(*) >= 100
+        ORDER BY total_funding DESC
+        LIMIT 10
+        """,
+        params=params,
+    )
+
+
+def fetch_jobs_per_million_by_state(where_clause: str, params: dict[str, Any]) -> pd.DataFrame:
+    """Return states with the strongest jobs-supported intensity."""
+    return read_sql(
+        f"""
+        SELECT
+            borrower_state,
+            COUNT(*) AS total_loans,
+            SUM(COALESCE(jobs_supported, 0)) AS total_jobs_supported,
+            SUM(COALESCE(loan_amount, 0)) AS total_funding,
+            CASE
+                WHEN SUM(COALESCE(loan_amount, 0)) = 0 THEN 0
+                ELSE (SUM(COALESCE(jobs_supported, 0)) / SUM(COALESCE(loan_amount, 0))) * 1000000
+            END AS jobs_per_million
+        FROM loans
+        {where_clause}
+        {'AND' if where_clause else 'WHERE'} borrower_state IS NOT NULL
+        GROUP BY borrower_state
+        HAVING SUM(COALESCE(loan_amount, 0)) >= 25000000
+        ORDER BY jobs_per_million DESC
+        LIMIT 10
+        """,
+        params=params,
+    )
+
+
+def fetch_program_comparison(where_clause: str, params: dict[str, Any]) -> pd.DataFrame:
+    """Return side-by-side metrics for 7(a) versus 504 program activity."""
+    return read_sql(
+        f"""
+        SELECT
+            program,
+            COUNT(*) AS total_loans,
+            SUM(COALESCE(loan_amount, 0)) AS total_funding,
+            AVG(loan_amount) AS average_loan_size,
+            SUM(COALESCE(jobs_supported, 0)) AS total_jobs_supported
+        FROM loans
+        {where_clause}
+        GROUP BY program
+        ORDER BY total_funding DESC
+        """
+    , params=params)
+
+
 def format_currency(value: float | int | None) -> str:
     """Format a numeric value as currency for display."""
     if value is None or pd.isna(value):
@@ -242,23 +440,230 @@ def format_count(value: float | int | None) -> str:
     return f"{int(value):,}"
 
 
-def render_pie_chart(df: pd.DataFrame) -> None:
-    """Render a pie chart using Vega-Lite."""
-    st.vega_lite_chart(
-        df,
-        {
-            "mark": {"type": "arc", "outerRadius": 120},
-            "encoding": {
-                "theta": {"field": "total_loans", "type": "quantitative"},
-                "color": {"field": "loan_status", "type": "nominal"},
-                "tooltip": [
-                    {"field": "loan_status", "type": "nominal"},
-                    {"field": "total_loans", "type": "quantitative"},
-                ],
-            },
-        },
-        width="stretch",
+def format_percent(value: float | int | None) -> str:
+    """Format a decimal share as a percentage for display."""
+    if value is None or pd.isna(value):
+        return "0.0%"
+    return f"{float(value) * 100:.1f}%"
+
+
+def apply_app_styles() -> None:
+    """Inject a small custom style layer so the dashboard feels more polished."""
+    st.markdown(
+        f"""
+        <style>
+            .stApp {{
+                background:
+                    radial-gradient(circle at top left, rgba(15,118,110,0.08), transparent 28%),
+                    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+            }}
+            div[data-testid="stMetric"] {{
+                background: rgba(255, 255, 255, 0.92);
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 18px;
+                padding: 1rem 1.1rem;
+                box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+            }}
+            .insight-card {{
+                background: linear-gradient(180deg, #ffffff 0%, {CARD_BACKGROUND} 100%);
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 18px;
+                padding: 1rem 1.1rem;
+                min-height: 150px;
+                box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+            }}
+            .insight-label {{
+                color: #475569;
+                font-size: 0.82rem;
+                font-weight: 700;
+                letter-spacing: 0.02em;
+                text-transform: uppercase;
+                margin-bottom: 0.6rem;
+            }}
+            .insight-value {{
+                color: #0f172a;
+                font-size: 1.6rem;
+                font-weight: 800;
+                line-height: 1.2;
+                margin-bottom: 0.35rem;
+            }}
+            .insight-note {{
+                color: #475569;
+                font-size: 0.95rem;
+                line-height: 1.45;
+            }}
+            .scope-note {{
+                background: rgba(255, 255, 255, 0.82);
+                border: 1px solid rgba(15, 23, 42, 0.08);
+                border-radius: 16px;
+                padding: 0.9rem 1rem;
+                margin-bottom: 1rem;
+                color: #334155;
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
+
+
+def style_figure(figure: Any) -> Any:
+    """Apply a consistent visual theme across Plotly charts."""
+    figure.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(255,255,255,0.95)",
+        font={"family": "Arial, sans-serif", "color": "#0f172a"},
+        margin={"l": 12, "r": 12, "t": 48, "b": 12},
+        title={"x": 0.0, "xanchor": "left"},
+        colorway=PLOT_COLOR_SEQUENCE,
+    )
+    figure.update_xaxes(showgrid=True, gridcolor="rgba(148, 163, 184, 0.18)", zeroline=False)
+    figure.update_yaxes(showgrid=True, gridcolor="rgba(148, 163, 184, 0.18)", zeroline=False)
+    return figure
+
+
+def render_bar_chart(
+    df: pd.DataFrame,
+    x: str,
+    y: str,
+    title: str,
+    orientation: str = "h",
+    text_auto: str | bool = False,
+    color: str | None = None,
+) -> None:
+    """Render a formatted Plotly bar chart."""
+    if df.empty:
+        st.info("No results available for this chart.")
+        return
+
+    figure = px.bar(
+        df,
+        x=x,
+        y=y,
+        orientation=orientation,
+        title=title,
+        text_auto=text_auto,
+        color=color,
+        color_discrete_sequence=PLOT_COLOR_SEQUENCE,
+    )
+    style_figure(figure)
+    if any(term in x for term in ("funding", "amount", "size", "approval")):
+        figure.update_xaxes(tickprefix="$", separatethousands=True)
+        figure.update_traces(hovertemplate="%{y}<br>%{x:$,.0f}<extra></extra>")
+    elif "rate" in x or "share" in x:
+        figure.update_xaxes(tickformat=".0%")
+        figure.update_traces(hovertemplate="%{y}<br>%{x:.1%}<extra></extra>")
+    elif "jobs_per_million" in x:
+        figure.update_xaxes(tickformat=",.0f")
+        figure.update_traces(hovertemplate="%{y}<br>%{x:,.0f} jobs per $1M<extra></extra>")
+    else:
+        figure.update_xaxes(tickformat=",.0f")
+    st.plotly_chart(figure, use_container_width=True)
+
+
+def render_pie_chart(df: pd.DataFrame) -> None:
+    """Render a pie chart using Plotly."""
+    figure = px.pie(
+        df,
+        names="loan_status",
+        values="total_loans",
+        title="Loan Status Distribution",
+        color_discrete_sequence=PLOT_COLOR_SEQUENCE,
+    )
+    style_figure(figure)
+    st.plotly_chart(figure, use_container_width=True)
+
+
+def render_scope_note(scope_df: pd.DataFrame) -> None:
+    """Render a concise note about dataset timing and coverage."""
+    if scope_df.empty:
+        return
+
+    scope = scope_df.iloc[0]
+    latest_as_of_date = pd.to_datetime(scope["latest_as_of_date"], errors="coerce")
+    latest_text = (
+        latest_as_of_date.strftime("%B %d, %Y")
+        if pd.notna(latest_as_of_date)
+        else "Unknown"
+    )
+    st.markdown(
+        (
+            '<div class="scope-note"><strong>Dataset scope.</strong> '
+            f"This dashboard combines SBA 504 loans from fiscal years {int(scope['min_year'])}-{2009} "
+            f"and SBA 7(a) loans from fiscal years 2020-{int(scope['max_year'])}. "
+            f"Latest FOIA extract date: {latest_text}."
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_insight_card(label: str, value: str, note: str) -> None:
+    """Render a styled key-finding card."""
+    st.markdown(
+        f"""
+        <div class="insight-card">
+            <div class="insight-label">{label}</div>
+            <div class="insight-value">{value}</div>
+            <div class="insight-note">{note}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_key_findings(
+    state_funding_df: pd.DataFrame,
+    industry_df: pd.DataFrame,
+    sector_risk_df: pd.DataFrame,
+    top_lenders_df: pd.DataFrame,
+) -> None:
+    """Render top-of-page cards with the clearest analytical signals."""
+    st.subheader("Key Findings")
+    finding_columns = st.columns(4)
+
+    with finding_columns[0]:
+        if state_funding_df.empty:
+            render_insight_card("Top State", "No data", "No state-level funding matched the current filters.")
+        else:
+            top_state = state_funding_df.iloc[0]
+            render_insight_card(
+                "Top State",
+                str(top_state["borrower_state"]),
+                f"{format_currency(top_state['total_funding'])} in approved funding.",
+            )
+
+    with finding_columns[1]:
+        if industry_df.empty:
+            render_insight_card("Top Industry", "No data", "No industry results matched the current filters.")
+        else:
+            top_industry = industry_df.iloc[0]
+            render_insight_card(
+                "Top Industry",
+                str(top_industry["naics_description"]),
+                f"{format_currency(top_industry['total_funding'])} across {format_count(top_industry['total_loans'])} loans.",
+            )
+
+    with finding_columns[2]:
+        if sector_risk_df.empty:
+            render_insight_card("Highest Risk Sector", "No data", "No charge-off benchmark met the minimum funding threshold.")
+        else:
+            top_sector = sector_risk_df.iloc[0]
+            render_insight_card(
+                "Highest Risk Sector",
+                str(top_sector["sector"]),
+                f"{format_percent(top_sector['charge_off_rate'])} charge-off rate on {format_currency(top_sector['total_funding'])}.",
+            )
+
+    with finding_columns[3]:
+        if top_lenders_df.empty:
+            render_insight_card("Top Lender", "No data", "No lender-level funding results matched the current filters.")
+        else:
+            top_lender = top_lenders_df.iloc[0]
+            render_insight_card(
+                "Top Lender",
+                str(top_lender["lender_name"]),
+                f"{format_currency(top_lender['total_funding'])} across {format_count(top_lender['total_loans'])} loans.",
+            )
 
 
 def extract_response_text(response_json: dict[str, Any]) -> str:
@@ -463,8 +868,17 @@ def render_chat_result(result: dict[str, Any]) -> None:
         return
 
     if result["chart_type"] == "bar" and len(result_df.columns) >= 2:
-        chart_df = result_df.set_index(result_df.columns[0])
-        st.bar_chart(chart_df[result_df.columns[1]], width="stretch")
+        chart_df = result_df.copy()
+        label_column = chart_df.columns[0]
+        value_column = chart_df.columns[1]
+        chart_df = chart_df.sort_values(by=value_column, ascending=True)
+        render_bar_chart(
+            chart_df,
+            x=value_column,
+            y=label_column,
+            title=str(result["answer_title"]),
+            orientation="h",
+        )
     elif result["chart_type"] == "pie" and len(result_df.columns) >= 2:
         render_pie_chart(
             pd.DataFrame(
@@ -477,7 +891,7 @@ def render_chat_result(result: dict[str, Any]) -> None:
     elif result["chart_type"] == "metric" and len(result_df.columns) == 1 and len(result_df) == 1:
         st.metric(str(result_df.columns[0]), str(result_df.iloc[0, 0]))
 
-    st.dataframe(result_df, width="stretch", hide_index=True)
+    st.dataframe(result_df, use_container_width=True, hide_index=True)
 
 
 def render_ask_the_data() -> None:
@@ -530,15 +944,19 @@ def render_ask_the_data() -> None:
 def render_dashboard() -> None:
     """Render the SBA Capital Watch dashboard."""
     st.set_page_config(page_title="SBA Capital Watch", layout="wide")
+    apply_app_styles()
     st.title("SBA Capital Watch")
-    st.caption("Public SBA 7(a) and 504 FOIA lending data in PostgreSQL.")
+    st.caption("An analytical view of public SBA 7(a) and 504 FOIA lending activity.")
 
     try:
+        scope_df = fetch_dataset_scope()
         states, years, industries_df = load_filter_options()
     except Exception as exc:
         st.error(f"Unable to load dashboard data: {exc}")
         st.info("Ensure DATABASE_URL is set and run the load/transform scripts before starting Streamlit.")
         st.stop()
+
+    render_scope_note(scope_df)
 
     industry_options = [ALL_OPTION] + industries_df["naics_code"].astype(str).tolist()
     industry_labels = {
@@ -562,44 +980,163 @@ def render_dashboard() -> None:
     state_funding_df = fetch_state_funding(where_clause, params)
     industry_df = fetch_industry_analysis(where_clause, params)
     loan_status_df = fetch_loan_status(where_clause, params)
+    sector_risk_df = fetch_charge_off_rate_by_sector(where_clause, params)
+    average_loan_state_df = fetch_average_loan_by_state(where_clause, params)
+    guarantee_share_df = fetch_guarantee_share_by_industry(where_clause, params)
+    top_lenders_df = fetch_top_lenders(where_clause, params)
+    jobs_per_million_df = fetch_jobs_per_million_by_state(where_clause, params)
+    program_comparison_df = fetch_program_comparison(where_clause, params)
 
     if overview_df.empty or int(overview_df.loc[0, "total_loans"]) == 0:
         st.warning("No loans match the current filters.")
         st.stop()
 
+    active_filters: list[str] = []
+    if selected_state != ALL_OPTION:
+        active_filters.append(f"State: {selected_state}")
+    if selected_year != ALL_OPTION:
+        active_filters.append(f"Year: {selected_year}")
+    if selected_industry != ALL_OPTION:
+        active_filters.append(f"Industry: {industry_labels.get(selected_industry, selected_industry)}")
+    if active_filters:
+        st.caption("Current slice: " + " | ".join(active_filters))
+
+    render_key_findings(state_funding_df, industry_df, sector_risk_df, top_lenders_df)
+
     st.subheader("Overview")
-    metric_columns = st.columns(3)
+    metric_columns = st.columns(4)
     metric_columns[0].metric("Total Loans", format_count(overview_df.loc[0, "total_loans"]))
     metric_columns[1].metric("Total Funding", format_currency(overview_df.loc[0, "total_funding"]))
     metric_columns[2].metric(
         "Average Loan Size",
         format_currency(overview_df.loc[0, "average_loan_size"]),
     )
+    metric_columns[3].metric(
+        "Jobs Supported",
+        format_count(overview_df.loc[0, "total_jobs_supported"]),
+    )
 
-    st.subheader("State Funding")
-    if state_funding_df.empty:
-        st.info("No state funding results for the selected filters.")
-    else:
-        chart_df = state_funding_df.set_index("borrower_state")
-        st.bar_chart(chart_df["total_funding"], width="stretch")
+    overview_left, overview_right = st.columns((1.4, 1))
 
-    st.subheader("Industry Analysis")
-    if industry_df.empty:
-        st.info("No industry results for the selected filters.")
-    else:
-        display_df = industry_df.copy()
-        display_df["total_funding"] = display_df["total_funding"].map(format_currency)
-        st.dataframe(display_df, width="stretch", hide_index=True)
-        st.bar_chart(
-            industry_df.set_index("naics_code")["total_funding"],
-            width="stretch",
+    with overview_left:
+        st.subheader("State Funding")
+        top_states_df = state_funding_df.head(10).sort_values("total_funding", ascending=True)
+        render_bar_chart(
+            top_states_df,
+            x="total_funding",
+            y="borrower_state",
+            title="Top 10 States by Approved Funding",
+            orientation="h",
         )
 
-    st.subheader("Loan Status")
-    if loan_status_df.empty:
-        st.info("No loan status results for the selected filters.")
-    else:
-        render_pie_chart(loan_status_df)
+    with overview_right:
+        st.subheader("Loan Status")
+        if loan_status_df.empty:
+            st.info("No loan status results for the selected filters.")
+        else:
+            render_pie_chart(loan_status_df)
+
+    st.subheader("Industry Analysis")
+    industry_left, industry_right = st.columns((1.2, 1))
+    with industry_left:
+        if industry_df.empty:
+            st.info("No industry results for the selected filters.")
+        else:
+            industry_display_df = industry_df.copy()
+            industry_display_df["total_funding"] = industry_display_df["total_funding"].map(format_currency)
+            industry_display_df["total_loans"] = industry_display_df["total_loans"].map(format_count)
+            st.dataframe(industry_display_df, use_container_width=True, hide_index=True)
+
+    with industry_right:
+        top_industries_df = industry_df.head(10).sort_values("total_funding", ascending=True)
+        render_bar_chart(
+            top_industries_df,
+            x="total_funding",
+            y="naics_description",
+            title="Top 10 Industries by Approved Funding",
+            orientation="h",
+        )
+
+    st.subheader("Analyst Metrics")
+    metrics_row_left, metrics_row_right = st.columns(2)
+
+    with metrics_row_left:
+        render_bar_chart(
+            sector_risk_df.sort_values("charge_off_rate", ascending=True),
+            x="charge_off_rate",
+            y="sector",
+            title="Charge-Off Risk by Sector",
+            orientation="h",
+            color="sector",
+        )
+        render_bar_chart(
+            jobs_per_million_df.sort_values("jobs_per_million", ascending=True),
+            x="jobs_per_million",
+            y="borrower_state",
+            title="Jobs Supported per $1M by State",
+            orientation="h",
+            color="borrower_state",
+        )
+
+    with metrics_row_right:
+        render_bar_chart(
+            average_loan_state_df.sort_values("average_loan_size", ascending=True),
+            x="average_loan_size",
+            y="borrower_state",
+            title="Average Loan Size by State",
+            orientation="h",
+            color="borrower_state",
+        )
+        render_bar_chart(
+            guarantee_share_df.sort_values("guarantee_share", ascending=True),
+            x="guarantee_share",
+            y="naics_description",
+            title="SBA Guarantee Share by Industry",
+            orientation="h",
+            color="naics_description",
+        )
+
+    secondary_left, secondary_right = st.columns(2)
+
+    with secondary_left:
+        st.markdown("**Top Lenders by Funding**")
+        lenders_display_df = top_lenders_df.copy()
+        if lenders_display_df.empty:
+            st.info("No lender-level results for the selected filters.")
+        else:
+            lenders_display_df["total_funding"] = lenders_display_df["total_funding"].map(format_currency)
+            lenders_display_df["average_loan_size"] = lenders_display_df["average_loan_size"].map(format_currency)
+            lenders_display_df["total_loans"] = lenders_display_df["total_loans"].map(format_count)
+            st.dataframe(lenders_display_df, use_container_width=True, hide_index=True)
+
+    with secondary_right:
+        st.markdown("**7(a) vs 504 Program Comparison**")
+        if program_comparison_df.empty:
+            st.info("No program comparison results for the selected filters.")
+        else:
+            program_cards = st.columns(len(program_comparison_df))
+            for index, (_, row) in enumerate(program_comparison_df.iterrows()):
+                with program_cards[index]:
+                    render_insight_card(
+                        f"{row['program']} Program",
+                        format_currency(row["total_funding"]),
+                        (
+                            f"{format_count(row['total_loans'])} loans | "
+                            f"Avg {format_currency(row['average_loan_size'])} | "
+                            f"{format_count(row['total_jobs_supported'])} jobs"
+                        ),
+                    )
+
+    with st.expander("Methodology / Caveats"):
+        st.markdown(
+            """
+            - This app combines two public SBA FOIA extracts: 504 loans from fiscal years 1992-2009 and 7(a) loans from fiscal years 2020-2026.
+            - Because the time windows are discontinuous, comparisons should be read as directional patterns in the assembled dataset, not as a complete year-by-year history of SBA lending.
+            - Charge-off risk is shown as `sum(charge_off_amount) / sum(loan_amount)` and broad sectors are inferred from NAICS prefixes.
+            - Industry-level and lender-level rankings use minimum row thresholds to avoid noisy leaders driven by tiny samples.
+            - Filter selections update all charts and cards on this page, while the `Ask the Data` chat remains restricted to the analytical SQL views for safety.
+            """
+        )
 
     render_ask_the_data()
 
