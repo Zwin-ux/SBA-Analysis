@@ -64,6 +64,8 @@ COLUMN_ALIASES = {
     "terminmonths": "term_in_months",
     "naicscode": "naics_code",
     "naicsdescription": "naics_description",
+    "franchisecode": "franchise_code",
+    "franchisename": "franchise_name",
     "projectcounty": "project_county",
     "projectstate": "project_state",
     "sbadistrictoffice": "sba_district_office",
