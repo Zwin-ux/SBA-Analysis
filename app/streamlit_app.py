@@ -16,10 +16,28 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ALL_OPTION = "All"
 
 
+def get_secret_database_url() -> str | None:
+    """Read a database URL from Streamlit secrets when deployed."""
+    try:
+        if "DATABASE_URL" in st.secrets:
+            return str(st.secrets["DATABASE_URL"])
+        if "database" in st.secrets and "url" in st.secrets["database"]:
+            return str(st.secrets["database"]["url"])
+    except Exception:
+        return None
+
+    return None
+
+
 def get_database_url() -> str:
-    """Read the database URL from the environment."""
-    load_dotenv(PROJECT_ROOT / ".env")
-    database_url = os.getenv("DATABASE_URL")
+    """Read the database URL from Streamlit secrets or the environment."""
+    secret_database_url = get_secret_database_url()
+    if secret_database_url:
+        database_url = secret_database_url
+    else:
+        load_dotenv(PROJECT_ROOT / ".env")
+        database_url = os.getenv("DATABASE_URL")
+
     if not database_url:
         raise EnvironmentError("DATABASE_URL is not set.")
 
