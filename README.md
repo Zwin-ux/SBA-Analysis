@@ -2,148 +2,139 @@
 
 Created by Mazen Zwin.
 
-This project started with a basic question: if the SBA is helping small businesses get access to capital, where is that money actually going, which industries lean on it the most, and where do the warning signs show up? The public FOIA files are useful, but not in the form they come in. They are wide, inconsistent across programs, and awkward to query directly. The point of this repo is to turn that raw material into something clean enough to analyze without pretending it is more complicated than it needs to be.
+SBA Capital Watch is a data engineering and analytics project built around public SBA 7(a) and 504 FOIA loan data. The goal was to take large, messy public loan extracts and turn them into a clean analytical workflow: inspect raw data, standardize it, load it into PostgreSQL, build reusable SQL views, and surface the results in an interactive Streamlit dashboard.
 
-The repo takes two public SBA loan extracts, cleans them into one working dataset, loads the result into PostgreSQL, creates reusable SQL views, and exposes the main patterns in a Streamlit dashboard. It is meant to be readable first and clever second.
+This repo is organized to show both the engineering side and the analytical side of the project. It is meant to be readable, reproducible, and easy to walk through in an interview or recruiter review.
 
-## What This Project Covers
+## Project Summary
 
-- SBA 7(a) and 504 FOIA loan data https://data.sba.gov/dataset/7-a-504-foia
-- raw file inspection and schema checks
-- cleaning and standardization in Python
-- PostgreSQL loading and analytical views
-- a dashboard for state, industry, and loan status analysis
+- Built a Python data pipeline for SBA loan analysis
+- Combined raw 7(a) and 504 FOIA datasets into one cleaned analytical dataset
+- Loaded `467,294` cleaned loan records into PostgreSQL
+- Created SQL views for state funding, industry funding, loan status, and jobs-per-dollar analysis
+- Built a Streamlit dashboard with interactive filters for state, year, and industry
 
-## Data Source
+## Business Question
 
-This project uses two public SBA FOIA CSV files:
-
-- `foia-7a-fy2020-present-as-of-251231.csv`
-- `foia-504-fy1991-fy2009-asof-251231.csv`
-
-They belong in `data/raw/`. The pipeline reads them, creates small preview files for inspection, and writes one cleaned output to `data/processed/sba_loans_clean.csv`.
-
-## Why The Structure Looks Like This
-
-- `src/ingest.py`
-  Checks the raw files, prints columns and missingness, and saves preview CSVs.
-- `src/clean.py`
-  Standardizes names, trims whitespace, converts types, removes duplicates, and writes one cleaned file.
-- `src/load.py`
-  Initializes the database schema from `sql/schema.sql` and loads the cleaned CSV into PostgreSQL in chunks.
-- `src/transform.py`
-  Applies the analytical views defined in `sql/views.sql`.
-- `app/streamlit_app.py`
-  Runs the dashboard against the PostgreSQL data.
-- `sql/schema.sql`
-  Defines the `loans` table and a few practical indexes.
-- `sql/views.sql`
-  Defines reusable analytical views for state funding, industry funding, loan status, and jobs-per-dollar.
-
-That is the whole idea: keep the flow obvious enough that someone else can open the repo and understand where the numbers came from.
-
-## The Analytical Theory Behind It
-
-This is not a machine learning project and it is not trying to look like one. The analysis is built around a few simple ideas that are worth getting right before doing anything more advanced.
-
-First, capital concentration matters. If a small number of states capture a large share of SBA lending, that tells you something about where access, demand, lender relationships, and business density are strongest.
-
-Second, industry dependence matters. A high loan count is one thing, but heavy dollar concentration in a handful of NAICS groups can tell a different story about where federal-backed credit is doing the most work.
-
-Third, charge-offs matter because they are one of the clearest signs of stress in the portfolio. They are not the whole risk story, but they are a solid starting point for asking which sectors or business types appear more fragile.
-
-## Project Questions
-
-These are the three questions the project is built around:
+The project is centered around three questions:
 
 1. Which states receive the most SBA funding?
-States
-California: $38.82B
-Texas: $22.61B
-Florida: $17.77B
-New York: $10.24B
-Georgia: $9.74B
-Illinois: $8.60B
-Ohio: $7.95B
-Colorado: $7.32B
-Washington: $6.94B
-North Carolina: $6.67B
-California is clearly the leader by a wide margin.
+2. Which industries rely most on SBA-backed loans?
+3. Which sectors show the strongest signs of charge-off risk?
 
-Industries
-Hotels (except Casino Hotels) and Motels: $17.75B
-Full-Service Restaurants: $8.64B
-Limited-Service Restaurants: $5.65B
-Child Day Care Services: $5.11B
-Offices of Dentists: $4.79B
-Offices of Physicians: $3.77B
-By loan count, the heaviest users are:
+## Key Findings
 
-Full-Service Restaurants: 16,355 loans
-Limited-Service Restaurants: 11,929
-Hotels and Motels: 10,146
-Fitness and Recreational Sports Centers: 7,666
-Child Day Care Services: 7,485
+Using the combined cleaned dataset:
 
+- Top states by total SBA funding:
+  - California: `$38.82B`
+  - Texas: `$22.61B`
+  - Florida: `$17.77B`
+  - New York: `$10.24B`
+  - Georgia: `$9.74B`
 
- Which industries rely most on SBA-backed loans?
- 
-Hotels (except Casino Hotels) and Motels: about $17.75B
-Full-Service Restaurants: about $8.64B
-Limited-Service Restaurants: about $5.65B
-Child Day Care Services: about $5.11B
-Offices of Dentists: about $4.79B
-Offices of Physicians: about $3.77B
- 
- Which sectors show the strongest signs of charge-off risk?
+- Industries with the heaviest SBA dependence by funded dollars:
+  - Hotels (except Casino Hotels) and Motels: `$17.75B`
+  - Full-Service Restaurants: `$8.64B`
+  - Limited-Service Restaurants: `$5.65B`
+  - Child Day Care Services: `$5.11B`
+  - Offices of Dentists: `$4.79B`
 
- Accommodation and Food Services: 4.12% charge-off rate, about $1.65B charged off
-Arts, Entertainment, and Recreation: 3.31%
-Manufacturing: 2.94%
-Real Estate and Rental and Leasing: 2.42%
-Retail Trade: 2.36%
+- Sectors with the strongest charge-off stress:
+  - Accommodation and Food Services: `4.12%` charge-off rate by funded dollars, about `$1.65B` charged off
+  - Arts, Entertainment, and Recreation: `3.31%`
+  - Manufacturing: `2.94%`
+  - Real Estate and Rental and Leasing: `2.42%`
+  - Retail Trade: `2.36%`
 
-Accommodation and Food Services: $1.65B charged off, 4.12% of funded dollars
-Arts, Entertainment, and Recreation: 3.31% charge-off rate
-Manufacturing: 2.94%
-Real Estate and Rental and Leasing: 2.42%
-Retail Trade: 2.36%
+## Tech Stack
 
-## Running The Project
+- Python 3.11
+- pandas
+- SQLAlchemy
+- psycopg2
+- PostgreSQL
+- Streamlit
+- python-dotenv
 
-Create a virtual environment and install the dependencies:
+## Repository Structure
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+```text
+sba-capital-watch/
+├── app/
+│   └── streamlit_app.py
+├── data/
+│   ├── raw/
+│   └── processed/
+├── docs/
+│   └── techforce_brief.md
+├── sql/
+│   ├── schema.sql
+│   └── views.sql
+├── src/
+│   ├── ingest.py
+│   ├── clean.py
+│   ├── load.py
+│   └── transform.py
+├── Analysis.pdf
+├── README.md
+└── requirements.txt
 ```
 
-Set your database connection in `.env`:
+## Pipeline Flow
+
+1. `src/ingest.py`
+   Reads the raw SBA CSV files, logs schema information, and creates preview files.
+
+2. `src/clean.py`
+   Standardizes column names, removes duplicates, trims whitespace, converts numeric and date fields, and writes a cleaned CSV.
+
+3. `src/load.py`
+   Initializes PostgreSQL from `sql/schema.sql` and loads the cleaned dataset into the `loans` table in chunks.
+
+4. `src/transform.py`
+   Creates analytical views from `sql/views.sql`.
+
+5. `app/streamlit_app.py`
+   Serves the dashboard using SQL queries against PostgreSQL.
+
+## Deliverables
+
+- Working Python ETL pipeline
+- PostgreSQL analytical data model
+- Streamlit dashboard
+- Analysis report in [Analysis.pdf](Analysis.pdf)
+- Recruiter summary in [docs/techforce_brief.md](docs/techforce_brief.md)
+
+## Running Locally
+
+Create and use the virtual environment:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+Set the database connection in `.env`:
 
 ```env
-DATABASE_URL=postgresql+psycopg2://postgres@localhost:5432/sba_capital_watch
+DATABASE_URL=postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/sba_capital_watch
 ```
 
-Then run the pipeline in order:
+Run the full pipeline:
 
-```bash
-python src/ingest.py
-python src/clean.py
-python src/load.py
-python src/transform.py
-streamlit run app/streamlit_app.py
+```powershell
+.\.venv\Scripts\python.exe src\ingest.py
+.\.venv\Scripts\python.exe src\clean.py
+.\.venv\Scripts\python.exe src\load.py
+.\.venv\Scripts\python.exe src\transform.py
+.\.venv\Scripts\python.exe -m streamlit run app/streamlit_app.py
 ```
 
-## Notes
+## Deployment Note
 
-- The raw CSVs are intentionally not tracked in Git because they are large public source files.
-- The processed CSV output is also ignored so the repo stays lightweight and reproducible.
-- If the current shell still points to the Windows Store `python` stub after installation, open a fresh terminal or use `.venv\Scripts\python.exe`.
+The local app uses PostgreSQL on `localhost`. For Streamlit Community Cloud, the app must use a remote PostgreSQL database and the connection string should be stored in Streamlit secrets as `DATABASE_URL`.
 
+## Notes on Authorship
 
-
-
-Codex | Open AI was used to help consult, generate code to help extract data , anaylsis was done by me!
-
-
+OpenAI tools were used to support coding and implementation work. The project direction, dataset choice, analytical framing, interpretation of findings, and final presentation decisions were done by Mazen Zwin.
