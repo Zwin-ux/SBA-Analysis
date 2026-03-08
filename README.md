@@ -29,7 +29,7 @@ This repo is organized to show both the engineering side and the analytical side
 2. Which industries rely most on SBA-backed loans?
 3. Which sectors show the strongest signs of charge-off risk?
 
-## Key Findings worth nothing!!!!
+## Key Findings worth noting!!!!
 
 Using the combined cleaned dataset:
 
