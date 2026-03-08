@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 
 LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -201,9 +202,28 @@ def convert_numeric_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFram
     for column in columns:
         if column not in df.columns:
             continue
-        cleaned = df[column].astype("string").str.replace(r"[$,%]", "", regex=True)
-        cleaned = cleaned.str.replace(",", "", regex=False)
-        df[column] = pd.to_numeric(cleaned, errors="coerce")
+
+        series = df[column]
+        if is_numeric_dtype(series):
+            continue
+
+        # Try the fast path first. Most SBA numeric fields are already plain digit strings.
+        numeric_series = pd.to_numeric(series, errors="coerce")
+        invalid_mask = series.notna() & numeric_series.isna()
+
+        if invalid_mask.any():
+            cleaned = series.astype("string")
+            needs_symbol_cleanup = cleaned[invalid_mask].str.contains(r"[$,%]", regex=True, na=False).any()
+            needs_comma_cleanup = cleaned[invalid_mask].str.contains(",", regex=False, na=False).any()
+
+            if needs_symbol_cleanup:
+                cleaned = cleaned.str.replace(r"[$,%]", "", regex=True)
+            if needs_comma_cleanup:
+                cleaned = cleaned.str.replace(",", "", regex=False)
+
+            numeric_series = pd.to_numeric(cleaned, errors="coerce")
+
+        df[column] = numeric_series
 
     integer_like_columns = {"jobs_supported", "approval_fiscal_year", "term_in_months"}
     for column in integer_like_columns.intersection(df.columns):
