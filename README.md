@@ -6,6 +6,10 @@ SBA Capital Watch is a data engineering and analytics project built around publi
 
 This repo is organized to show both the engineering side and the analytical side of the project. It is meant to be readable, reproducible, and easy to walk through in an interview or recruiter review.
 
+## Live App
+
+- Streamlit deployment: [appapppy-noirldcwsrzrbeqqfaeuqt.streamlit.app](https://appapppy-noirldcwsrzrbeqqfaeuqt.streamlit.app/)
+
 ## Project Summary
 
 - Built a Python data pipeline for SBA loan analysis
@@ -14,9 +18,7 @@ This repo is organized to show both the engineering side and the analytical side
 - Created SQL views for state funding, industry funding, loan status, and jobs-per-dollar analysis
 - Built a Streamlit dashboard with interactive filters for state, year, and industry
 
-## Business Question
-
-The project is centered around three questions:
+## Business Questions
 
 1. Which states receive the most SBA funding?
 2. Which industries rely most on SBA-backed loans?
@@ -61,42 +63,33 @@ Using the combined cleaned dataset:
 
 ```text
 sba-capital-watch/
-├── app/
-│   └── streamlit_app.py
-├── data/
-│   ├── raw/
-│   └── processed/
-├── docs/
-│   └── techforce_brief.md
-├── sql/
-│   ├── schema.sql
-│   └── views.sql
-├── src/
-│   ├── ingest.py
-│   ├── clean.py
-│   ├── load.py
-│   └── transform.py
-├── Analysis.pdf
-├── README.md
-└── requirements.txt
+|-- app/
+|   `-- streamlit_app.py
+|-- data/
+|   |-- raw/
+|   `-- processed/
+|-- docs/
+|   `-- techforce_brief.md
+|-- sql/
+|   |-- schema.sql
+|   `-- views.sql
+|-- src/
+|   |-- ingest.py
+|   |-- clean.py
+|   |-- load.py
+|   `-- transform.py
+|-- Analysis.pdf
+|-- README.md
+`-- requirements.txt
 ```
 
 ## Pipeline Flow
 
-1. `src/ingest.py`
-   Reads the raw SBA CSV files, logs schema information, and creates preview files.
-
-2. `src/clean.py`
-   Standardizes column names, removes duplicates, trims whitespace, converts numeric and date fields, and writes a cleaned CSV.
-
-3. `src/load.py`
-   Initializes PostgreSQL from `sql/schema.sql` and loads the cleaned dataset into the `loans` table in chunks.
-
-4. `src/transform.py`
-   Creates analytical views from `sql/views.sql`.
-
-5. `app/streamlit_app.py`
-   Serves the dashboard using SQL queries against PostgreSQL.
+1. `src/ingest.py` reads the raw SBA CSV files, logs schema information, and creates preview files.
+2. `src/clean.py` standardizes column names, removes duplicates, trims whitespace, converts numeric and date fields, and writes a cleaned CSV.
+3. `src/load.py` initializes PostgreSQL from `sql/schema.sql` and loads the cleaned dataset into the `loans` table in chunks.
+4. `src/transform.py` creates analytical views from `sql/views.sql`.
+5. `app/streamlit_app.py` serves the dashboard using SQL queries against PostgreSQL.
 
 ## Deliverables
 
@@ -133,7 +126,7 @@ Run the full pipeline:
 
 ## Deployment Note
 
-The local app uses PostgreSQL on `localhost`. For Streamlit Community Cloud, the app must use a remote PostgreSQL database and the connection string should be stored in Streamlit secrets as `DATABASE_URL`.
+The deployed app uses a remote PostgreSQL database and reads `DATABASE_URL` from Streamlit secrets. The local development version can continue using `.env`.
 
 ## Notes on Authorship
 
