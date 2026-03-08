@@ -2,6 +2,11 @@
 
 Created by Mazen Zwin.
 
+<img width="1918" height="848" alt="image" src="https://github.com/user-attachments/assets/14550c5b-b358-4286-b69e-be7686c09fbe" />
+
+<img width="1913" height="862" alt="image" src="https://github.com/user-attachments/assets/4fb06260-d856-4c69-ba5b-b95af2ac35b8" />
+
+
 SBA Capital Watch is a data engineering and analytics project built around public SBA 7(a) and 504 FOIA loan data. The goal was to take large, messy public loan extracts and turn them into a clean analytical workflow: inspect raw data, standardize it, load it into PostgreSQL, build reusable SQL views, and surface the results in an interactive Streamlit dashboard.
 
 This repo is organized to show both the engineering side and the analytical side of the project. It is meant to be readable, reproducible, and easy to walk through in an interview or recruiter review.
