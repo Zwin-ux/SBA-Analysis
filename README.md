@@ -75,7 +75,7 @@ sba-capital-watch/
 |   |-- raw/
 |   `-- processed/
 |-- docs/
-|   `-- techforce_brief.md
+|   `--
 |-- sql/
 |   |-- schema.sql
 |   `-- views.sql
