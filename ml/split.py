@@ -25,9 +25,11 @@ class TemporalSplit:
     train_years: tuple[int, ...]
     validation_years: tuple[int, ...]
     test_years: tuple[int, ...]
+    dropped_missing_year: int = 0
 
-    def summary(self) -> dict[str, dict[str, int]]:
+    def summary(self) -> dict[str, dict[str, int] | int]:
         return {
+            "dropped_missing_year": int(self.dropped_missing_year),
             "train": {
                 "rows": int(len(self.train)),
                 "min_year": min(self.train_years),
@@ -68,6 +70,7 @@ def temporal_split(
 
     years = pd.to_numeric(df[year_column], errors="coerce")
     known = df.loc[years.notna()].copy()
+    dropped_missing_year = int(len(df) - len(known))
     known["_split_year"] = years.loc[known.index].astype("int64")
 
     distinct_years = sorted(known["_split_year"].unique())
@@ -113,4 +116,5 @@ def temporal_split(
         train_years=tuple(int(year) for year in train_years),
         validation_years=tuple(int(year) for year in validation_years),
         test_years=tuple(int(year) for year in test_years),
+        dropped_missing_year=dropped_missing_year,
     )

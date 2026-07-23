@@ -112,7 +112,10 @@ def build_models(seed: int = RANDOM_SEED) -> dict[str, Pipeline]:
                         min_samples_leaf=10,
                         class_weight="balanced",
                         random_state=seed,
-                        n_jobs=-1,
+                        # n_jobs=1: parallel tree probability averaging is not
+                        # byte-deterministic, and reproducibility outranks
+                        # training speed for this baseline.
+                        n_jobs=1,
                     ),
                 ),
             ]

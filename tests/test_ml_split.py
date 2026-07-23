@@ -56,6 +56,21 @@ def test_split_summary_reports_rows_and_year_bounds(modeling_frame: pd.DataFrame
     assert summary["train"]["max_year"] < summary["validation"]["min_year"]
 
 
+def test_split_discloses_rows_dropped_for_unparseable_years(
+    modeling_frame: pd.DataFrame,
+) -> None:
+    corrupted = modeling_frame.copy()
+    bad_index = corrupted.index[:3]
+    corrupted.loc[bad_index, "approval_fiscal_year"] = "not-a-year"
+
+    split = temporal_split(corrupted)
+
+    assert split.dropped_missing_year == 3
+    assert split.summary()["dropped_missing_year"] == 3
+    total = len(split.train) + len(split.validation) + len(split.test)
+    assert total == len(corrupted) - 3
+
+
 def test_split_requires_three_distinct_years() -> None:
     df = pd.DataFrame({"approval_fiscal_year": [2020, 2020, 2021], "x": [1, 2, 3]})
 
