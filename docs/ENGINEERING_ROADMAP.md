@@ -10,10 +10,10 @@ A clean run over a small included fixture must produce deterministic output and 
 ### Build
 - `src/contracts.py`: canonical columns, dtypes, nullable rules, valid ranges, and category normalization.
 - `src/quality.py`: row counts, duplicates, null rates, invalid ranges, category drift, and program coverage.
-- `tests/fixtures/sba_sample.csv`: synthetic/de-identified sample covering 7(a), 504, missing values, duplicates, currency strings, invalid dates, and charge-offs.
-- `tests/test_clean.py`: column aliases, numeric parsing, date parsing, trimming, deduplication, and derived lender behavior.
-- `tests/test_quality.py`: quality thresholds and JSON report shape.
-- `tests/test_metrics.py`: reproduce a small set of dashboard aggregates from the fixture.
+- `tests/fixtures/sba_sample_raw.csv`: synthetic sample covering 7(a), 504, missing values, duplicates, currency strings, and charge-offs.
+- `tests/test_clean.py`: column aliases, numeric parsing, date parsing, trimming, deduplication, derived lender behavior, and pipeline determinism.
+- `tests/test_contracts.py`: contract violation codes, severity levels, and program alias normalization.
+- `tests/test_quality.py`: quality thresholds, JSON report shape, and CLI exit codes.
 - `pyproject.toml`: pytest, coverage, Ruff, and project configuration.
 
 ### Done when
@@ -28,15 +28,16 @@ A clean run over a small included fixture must produce deterministic output and 
 Build an honest predictive baseline that demonstrates statistical modeling without presenting the project as a production underwriting system.
 
 ### Build
-- `ml/features.py`: use only fields available at approval time.
-- `ml/train.py`: temporal train/validation/test split by approval fiscal year.
+- `ml/features.py`: explicit approval-time allowlist, hard leakage denylist, and target derivation.
+- `ml/split.py`: temporal train/validation/test split by approval fiscal year.
+- `ml/train.py`: preprocessing, both baseline models, and the `python -m ml.train` entry point.
 - `ml/evaluate.py`: ROC-AUC, PR-AUC, Brier score, calibration, confusion matrix, and threshold table.
 - Baseline models: regularized logistic regression and one tree-based model.
 - Handle imbalance with class weighting; do not oversample across time splits.
 - Explicitly exclude leakage fields such as charge-off amount/date, paid-in-full date, and post-outcome status.
-- `artifacts/metrics.json`, `artifacts/feature_importance.csv`, and reproducible plots.
+- `artifacts/model_metrics.json`, `artifacts/threshold_table.csv`, `artifacts/feature_effects.csv`, and `artifacts/calibration.csv` (generated, not committed).
 - `docs/MODEL_CARD.md`: target, population, features, exclusions, intended use, limitations, bias risks, and non-use for lending decisions.
-- Unit tests proving leakage columns cannot enter the feature matrix.
+- Unit tests proving leakage columns cannot enter the feature matrix (`tests/test_ml_leakage.py`).
 
 ### Done when
 - One command trains and evaluates from the documented dataset.
@@ -82,5 +83,5 @@ Make every portfolio claim independently verifiable.
 ### Done when
 - CI is green from a public clone.
 - The live app and demo-mode app both work.
-- No secrets, proprietary AmPac data, or oversized raw datasets are committed.
+- No secrets, private or proprietary data, or oversized raw datasets are committed.
 - The README links to generated evidence rather than unsupported claims.

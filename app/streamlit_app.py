@@ -75,7 +75,7 @@ def get_database_url() -> str:
         database_url = os.getenv("DATABASE_URL")
 
     if not database_url:
-        raise EnvironmentError("DATABASE_URL is not set.")
+        raise OSError("DATABASE_URL is not set.")
 
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
@@ -824,7 +824,7 @@ def run_data_chat(question: str) -> dict[str, Any]:
     """Generate SQL from a natural-language question and execute it safely."""
     api_key = get_openai_api_key()
     if not api_key:
-        raise EnvironmentError("OPENAI_API_KEY is not set.")
+        raise OSError("OPENAI_API_KEY is not set.")
 
     model = get_openai_model()
     prompt = build_sql_generation_prompt(question)
@@ -941,6 +941,99 @@ def render_ask_the_data() -> None:
         st.session_state.chat_messages.append({"role": "assistant", "payload": result})
 
 
+def render_methodology_and_limitations() -> None:
+    """Shared methodology and limitations notes for live and demo modes."""
+    with st.expander("Methodology & limitations"):
+        st.markdown(
+            """
+            **Methodology**
+            - This app combines two public SBA FOIA extracts: 504 loans from
+              fiscal years 1992-2009 and 7(a) loans from fiscal years 2020-2026.
+            - Charge-off risk is shown as `sum(charge_off_amount) / sum(loan_amount)`
+              and broad sectors are inferred from NAICS prefixes.
+            - Industry-level and lender-level rankings use minimum row thresholds
+              to avoid noisy leaders driven by tiny samples.
+            - Filter selections update all charts and cards on this page, while the
+              `Ask the Data` chat remains restricted to the analytical SQL views.
+
+            **Limitations**
+            - The time windows are discontinuous, so comparisons are directional
+              patterns in the assembled dataset, not a complete year-by-year
+              history of SBA lending; program and era are confounded.
+            - Recent loans have not had time to resolve, so charge-off rates for
+              recent cohorts are understated (right-censoring).
+            - `jobs_supported` is source-reported and not independently verified.
+            - All findings are descriptive; nothing here establishes causation.
+            - The charge-off risk baseline described in `docs/MODEL_CARD.md` is
+              analytical research and must not be used for credit decisions.
+            """
+        )
+
+
+def load_demo_frame() -> pd.DataFrame:
+    """Clean the bundled synthetic fixture for database-free demo mode."""
+    import sys
+
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+    from src.clean import clean_dataframe
+
+    raw = pd.read_csv(
+        PROJECT_ROOT / "tests" / "fixtures" / "sba_sample_raw.csv",
+        dtype=str,
+        keep_default_na=True,
+        low_memory=False,
+    )
+    cleaned, _ = clean_dataframe(raw)
+    return cleaned
+
+
+def render_demo_mode() -> None:
+    """Render a database-free preview backed by the bundled synthetic fixture."""
+    st.warning(
+        "Demo mode: the analytical database is unavailable, so this preview uses "
+        "the small synthetic fixture bundled with the repository. Values below "
+        "are synthetic and illustrate the pipeline, not real SBA lending."
+    )
+    try:
+        cleaned = load_demo_frame()
+    except Exception as exc:
+        st.error(f"Demo mode could not load the bundled fixture: {exc}")
+        return
+
+    metric_columns = st.columns(3)
+    metric_columns[0].metric("Fixture Loans", format_count(len(cleaned)))
+    metric_columns[1].metric("Fixture Funding", format_currency(cleaned["loan_amount"].sum()))
+    metric_columns[2].metric("Programs", ", ".join(sorted(cleaned["program"].dropna().unique())))
+
+    st.markdown("**Synthetic funding by state**")
+    state_funding = (
+        cleaned.groupby("borrower_state")
+        .agg(total_loans=("loan_amount", "size"), total_funding=("loan_amount", "sum"))
+        .reset_index()
+        .sort_values("total_funding", ascending=False)
+    )
+    display_df = state_funding.copy()
+    display_df["total_funding"] = display_df["total_funding"].map(format_currency)
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    st.markdown("**Cleaned fixture preview**")
+    preview_columns = [
+        "program",
+        "borrower_state",
+        "loan_amount",
+        "approval_fiscal_year",
+        "loan_status",
+    ]
+    st.dataframe(
+        cleaned[[column for column in preview_columns if column in cleaned.columns]],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    render_methodology_and_limitations()
+
+
 def render_dashboard() -> None:
     """Render the SBA Capital Watch dashboard."""
     st.set_page_config(page_title="SBA Capital Watch", layout="wide")
@@ -952,8 +1045,12 @@ def render_dashboard() -> None:
         scope_df = fetch_dataset_scope()
         states, years, industries_df = load_filter_options()
     except Exception as exc:
-        st.error(f"Unable to load dashboard data: {exc}")
-        st.info("Ensure DATABASE_URL is set and run the load/transform scripts before starting Streamlit.")
+        st.info(
+            "Live database unavailable "
+            f"({exc}). Set DATABASE_URL and run the load/transform scripts "
+            "for the full dashboard."
+        )
+        render_demo_mode()
         st.stop()
 
     render_scope_note(scope_df)
@@ -1127,16 +1224,7 @@ def render_dashboard() -> None:
                         ),
                     )
 
-    with st.expander("Methodology / Caveats"):
-        st.markdown(
-            """
-            - This app combines two public SBA FOIA extracts: 504 loans from fiscal years 1992-2009 and 7(a) loans from fiscal years 2020-2026.
-            - Because the time windows are discontinuous, comparisons should be read as directional patterns in the assembled dataset, not as a complete year-by-year history of SBA lending.
-            - Charge-off risk is shown as `sum(charge_off_amount) / sum(loan_amount)` and broad sectors are inferred from NAICS prefixes.
-            - Industry-level and lender-level rankings use minimum row thresholds to avoid noisy leaders driven by tiny samples.
-            - Filter selections update all charts and cards on this page, while the `Ask the Data` chat remains restricted to the analytical SQL views for safety.
-            """
-        )
+    render_methodology_and_limitations()
 
     render_ask_the_data()
 

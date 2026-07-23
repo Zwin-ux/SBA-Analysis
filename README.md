@@ -1,133 +1,250 @@
 # SBA Capital Watch
 
-Created by Mazen Zwin.
+**A reproducible data engineering and analytics project built on public SBA 7(a) and 504 loan data.**
 
-<img width="1917" height="871" alt="image" src="https://github.com/user-attachments/assets/671d73f8-5d38-4100-95bd-6c5ee103b0c3" />
+<p align="center">
+  <img width="1100" alt="SBA Capital Watch dashboard" src="https://github.com/user-attachments/assets/671d73f8-5d38-4100-95bd-6c5ee103b0c3" />
+</p>
 
+SBA Capital Watch converts large, inconsistent public FOIA extracts into a clean analytical dataset, validates that dataset through executable contracts, loads it into PostgreSQL, and presents decision-oriented aggregates in Streamlit.
 
-<img width="1913" height="862" alt="image" src="https://github.com/user-attachments/assets/4fb06260-d856-4c69-ba5b-b95af2ac35b8" />
+The project currently reports **467,294 cleaned loan records** across SBA 7(a) and 504 programs.
 
+## Review the project
 
-SBA Capital Watch is a data engineering and analytics project built around public SBA 7(a) and 504 FOIA loan data. The goal was to take large, messy public loan extracts and turn them into a clean analytical workflow: inspect raw data, standardize it, load it into PostgreSQL, build reusable SQL views, and surface the results in an interactive Streamlit dashboard.
+- **Live dashboard:** [Open SBA Capital Watch](https://appapppy-noirldcwsrzrbeqqfaeuqt.streamlit.app/)
+- **Case study:** [`docs/CASE_STUDY.md`](docs/CASE_STUDY.md)
+- **Data dictionary:** [`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md)
+- **Engineering roadmap:** [`docs/ENGINEERING_ROADMAP.md`](docs/ENGINEERING_ROADMAP.md)
+- **Model card:** [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md)
 
-This repo is organized to show both the engineering side and the analytical side of the project. It is meant to be readable, reproducible, and easy to walk through in an interview or recruiter review.
+## What this project demonstrates
 
-## Live App
+- Python ingestion and deterministic cleaning of large public datasets
+- Explicit schema, range, category, duplicate, null-rate, and relationship checks
+- Machine-readable JSON quality reports and stable dataset fingerprints
+- PostgreSQL schema design, chunked loading, indexes, and reusable analytical views
+- Streamlit and Plotly dashboards with state, year, industry, program, and lender analysis
+- Clear separation between source data, transformations, storage, queries, and presentation
+- A roadmap for a leakage-safe and interpretable charge-off risk baseline
 
-- Streamlit deployment: [appapppy-noirldcwsrzrbeqqfaeuqt.streamlit.app](https://appapppy-noirldcwsrzrbeqqfaeuqt.streamlit.app/)
+## Public-data scope
 
-## Project Summary
+This is a standalone portfolio project built from public SBA data. It does not require private employer code, proprietary business rules, customer records, or an internal application repository.
 
-- Built a Python data pipeline for SBA loan analysis
-- Combined raw 7(a) and 504 FOIA datasets into one cleaned analytical dataset
-- Loaded `467,294` cleaned loan records into PostgreSQL
-- Created SQL views for state funding, industry funding, loan status, and jobs-per-dollar analysis
-- Built a Streamlit dashboard with interactive filters for state, year, and industry
+Recruiter-facing views should remain aggregate and should not expose borrower contact information or present individual loan scores as lending decisions.
 
-##  Questions I asked before  that require this type of analysis
+## Questions explored
 
-1. Which states receive the most SBA funding?
-2. Which industries rely most on SBA-backed loans?
-3. Which sectors show the strongest signs of charge-off risk?
+1. Which states receive the most SBA-backed funding?
+2. Which industries account for the largest funded volume?
+3. Which broad sectors show the greatest charge-off stress?
+4. How do 7(a) and 504 activity differ?
+5. Which lenders and regions support the highest reported volume?
+6. How many source-reported jobs are associated with each $1 million of funding?
 
-## Key Findings worth noting!!!!
+## Reported findings
 
-Using the combined cleaned dataset:
+Using the current combined cleaned dataset:
 
-- Top states by total SBA funding:
-  - California: `$38.82B`
-  - Texas: `$22.61B`
-  - Florida: `$17.77B`
-  - New York: `$10.24B`
-  - Georgia: `$9.74B`
+### Funding by state
 
-- Industries with the heaviest SBA dependence by funded dollars:
-  - Hotels (except Casino Hotels) and Motels: `$17.75B`
-  - Full-Service Restaurants: `$8.64B`
-  - Limited-Service Restaurants: `$5.65B`
-  - Child Day Care Services: `$5.11B`
-  - Offices of Dentists: `$4.79B`
+| State | Total funding |
+|---|---:|
+| California | $38.82B |
+| Texas | $22.61B |
+| Florida | $17.77B |
+| New York | $10.24B |
+| Georgia | $9.74B |
 
-- Sectors with the strongest charge-off stress:
-  - Accommodation and Food Services: `4.12%` charge-off rate by funded dollars, about `$1.65B` charged off
-  - Arts, Entertainment, and Recreation: `3.31%`
-  - Manufacturing: `2.94%`
-  - Real Estate and Rental and Leasing: `2.42%`
-  - Retail Trade: `2.36%`
+### Largest industries by funded dollars
 
-## Tech Stack
+| Industry | Total funding |
+|---|---:|
+| Hotels and motels | $17.75B |
+| Full-service restaurants | $8.64B |
+| Limited-service restaurants | $5.65B |
+| Child day care services | $5.11B |
+| Offices of dentists | $4.79B |
 
-- Python 3.11
-- pandas
-- SQLAlchemy
-- psycopg2
-- PostgreSQL
-- Streamlit
-- python-dotenv
+### Broad-sector charge-off stress
 
-## Repository Structure
+| Sector | Charge-off rate by funded dollars |
+|---|---:|
+| Accommodation and Food Services | 4.12% |
+| Arts, Entertainment, and Recreation | 3.31% |
+| Manufacturing | 2.94% |
+| Real Estate and Rental and Leasing | 2.42% |
+| Retail Trade | 2.36% |
+
+These values depend on the current source snapshot and transformation rules. Public claims should remain only while they can be regenerated from the current database or evidence artifacts.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[Public SBA FOIA CSVs] --> B[Python ingest]
+    B --> C[Deterministic cleaning]
+    C --> D[Contracts and quality report]
+    D --> E[(PostgreSQL)]
+    E --> F[SQL analytical views]
+    F --> G[Streamlit dashboard]
+    D --> H[Planned risk baseline]
+    H --> G
+```
+
+## Reproducible sample pipeline
+
+The included synthetic fixture covers both programs and exercises:
+
+- Currency and comma parsing
+- Percentage parsing
+- Whitespace cleanup
+- Duplicate removal
+- Optional values
+- Program aliases
+- State normalization
+
+From a clean environment:
+
+```bash
+python -m venv .venv
+
+# Windows
+.venv\Scripts\python -m pip install -e ".[dev]"
+.venv\Scripts\python scripts/run_sample_pipeline.py
+.venv\Scripts\python -m pytest
+
+# macOS / Linux
+.venv/bin/python -m pip install -e ".[dev]"
+.venv/bin/python scripts/run_sample_pipeline.py
+.venv/bin/python -m pytest
+```
+
+The sample run produces:
 
 ```text
-sba-capital-watch/
-|-- app/
-|   `-- streamlit_app.py
-|-- data/
-|   |-- raw/
-|   `-- processed/
-|-- docs/
-|   `--
-|-- sql/
-|   |-- schema.sql
-|   `-- views.sql
-|-- src/
-|   |-- ingest.py
-|   |-- clean.py
-|   |-- load.py
-|   `-- transform.py
-|-- Analysis.pdf
-|-- README.md
-`-- requirements.txt
+artifacts/sample_clean.csv
+artifacts/data_quality.json
 ```
 
-## Pipeline Flow
+Validate any cleaned CSV directly:
 
-1. `src/ingest.py` reads the raw SBA CSV files, logs schema information, and creates preview files.
-2. `src/clean.py` standardizes column names, removes duplicates, trims whitespace, converts numeric and date fields, and writes a cleaned CSV.
-3. `src/load.py` initializes PostgreSQL from `sql/schema.sql` and loads the cleaned dataset into the `loans` table in chunks.
-4. `src/transform.py` creates analytical views from `sql/views.sql`.
-5. `app/streamlit_app.py` serves the dashboard using SQL queries against PostgreSQL.
+```bash
+python -m src.quality \
+  --input data/processed/sba_loans_clean.csv \
+  --output artifacts/data_quality.json
+```
 
+The command returns a non-zero exit code when error-level contract violations are present.
 
+## Charge-off risk baseline (research)
 
-## Running Locally
+The `ml/` package trains a leakage-safe charge-off baseline — regularized
+logistic regression plus a shallow random forest — using only approval-time
+features, with a temporal train/validation/test split by approval fiscal year.
+The feature allowlist, hard leakage denylist, target definition, and
+limitations are documented in [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md).
 
-Create and use the virtual environment:
+```bash
+python -m pip install -e ".[dev,ml]"
+python -m ml.train --input data/processed/sba_loans_clean.csv
+```
 
-```powershell
+Evaluation artifacts (`artifacts/model_metrics.json`, `threshold_table.csv`,
+`feature_effects.csv`, `calibration.csv`) are generated locally and are not
+committed. No real-data metrics are published until they have been generated
+from the actual cleaned FOIA extract; the test suite exercises the pipeline on
+synthetic data to prove mechanics only. This baseline is analytical research
+and must not be used for credit decisions.
+
+## Full PostgreSQL workflow
+
+Install the runtime dependencies:
+
+```bash
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python -m pip install -r requirements.txt
 ```
 
-Set the database connection in `.env`:
+Configure the database connection:
 
 ```env
 DATABASE_URL=postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/sba_capital_watch
 ```
 
-Run the full pipeline:
+Run the pipeline:
 
 ```powershell
-.\.venv\Scripts\python.exe src\ingest.py
-.\.venv\Scripts\python.exe src\clean.py
-.\.venv\Scripts\python.exe src\load.py
-.\.venv\Scripts\python.exe src\transform.py
-.\.venv\Scripts\python.exe -m streamlit run app/streamlit_app.py
+.venv\Scripts\python src\ingest.py
+.venv\Scripts\python src\clean.py
+.venv\Scripts\python -m src.quality --input data\processed\sba_loans_clean.csv --output artifacts\data_quality.json
+.venv\Scripts\python src\load.py
+.venv\Scripts\python src\transform.py
+.venv\Scripts\python -m streamlit run app\streamlit_app.py
 ```
 
-## Deployment Note
+## Repository structure
 
-The deployed app uses a remote PostgreSQL database and reads `DATABASE_URL` from Streamlit secrets. The local development version can continue using `.env`.
+```text
+SBA-Analysis/
+├── .devcontainer/
+│   └── devcontainer.json
+├── .github/
+│   └── workflows/ci.yml
+├── app/
+│   └── streamlit_app.py
+├── data/
+│   ├── raw/          # FOIA extracts (not committed)
+│   └── processed/    # cleaned output (not committed)
+├── docs/
+│   ├── CASE_STUDY.md
+│   ├── DATA_DICTIONARY.md
+│   ├── ENGINEERING_ROADMAP.md
+│   └── MODEL_CARD.md
+├── ml/
+│   ├── features.py
+│   ├── split.py
+│   ├── train.py
+│   └── evaluate.py
+├── scripts/
+│   └── run_sample_pipeline.py
+├── sql/
+│   ├── schema.sql
+│   └── views.sql
+├── src/
+│   ├── clean.py
+│   ├── contracts.py
+│   ├── ingest.py
+│   ├── load.py
+│   ├── quality.py
+│   └── transform.py
+├── tests/
+│   ├── conftest.py
+│   ├── fixtures/sba_sample_raw.csv
+│   ├── test_clean.py
+│   ├── test_contracts.py
+│   ├── test_quality.py
+│   ├── test_ml_features.py
+│   ├── test_ml_leakage.py
+│   ├── test_ml_metrics.py
+│   └── test_ml_split.py
+├── pyproject.toml
+├── requirements.txt
+└── README.md
+```
 
-## Notes on Authorship
+## Current limitations
 
-OpenAI tools were used to support coding and implementation work. The project direction, dataset choice, analytical framing, interpretation of findings, and final presentation decisions were done by Mazen Zwin.
+- The full public extracts are not committed because of their size.
+- Hosted dashboard availability depends on Streamlit and the remote PostgreSQL database.
+- Public FOIA records may be missing, delayed, revised, or inconsistently categorized.
+- Charge-off patterns are descriptive and do not establish causation.
+- `jobs_supported` is source-reported and should not be treated as independently verified job creation.
+- The planned predictive baseline is portfolio research, not a production underwriting system.
+
+## Authorship
+
+Created by **Mazen Zwin**.
+
+AI tools supported coding and implementation. Dataset selection, analytical framing, project direction, interpretation, and final presentation decisions were made by Mazen Zwin.

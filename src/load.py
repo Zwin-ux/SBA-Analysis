@@ -49,7 +49,7 @@ def get_database_url() -> str:
     load_dotenv(PROJECT_ROOT / ".env")
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
-        raise EnvironmentError("DATABASE_URL is not set.")
+        raise OSError("DATABASE_URL is not set.")
 
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
