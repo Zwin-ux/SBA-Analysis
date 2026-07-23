@@ -10,6 +10,11 @@ from typing import Any
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 
+try:
+    from src.contracts import normalize_contract_categories
+except ModuleNotFoundError:  # Preserve `python src/clean.py` from the repository root.
+    from contracts import normalize_contract_categories
+
 LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
@@ -209,14 +214,17 @@ def convert_numeric_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFram
         if is_numeric_dtype(series):
             continue
 
-        # Try the fast path first. Most SBA numeric fields are already plain digit strings.
         numeric_series = pd.to_numeric(series, errors="coerce")
         invalid_mask = series.notna() & numeric_series.isna()
 
         if invalid_mask.any():
             cleaned = series.astype("string")
-            needs_symbol_cleanup = cleaned[invalid_mask].str.contains(r"[$,%]", regex=True, na=False).any()
-            needs_comma_cleanup = cleaned[invalid_mask].str.contains(",", regex=False, na=False).any()
+            needs_symbol_cleanup = cleaned[invalid_mask].str.contains(
+                r"[$,%]", regex=True, na=False
+            ).any()
+            needs_comma_cleanup = cleaned[invalid_mask].str.contains(
+                ",", regex=False, na=False
+            ).any()
 
             if needs_symbol_cleanup:
                 cleaned = cleaned.str.replace(r"[$,%]", "", regex=True)
@@ -249,21 +257,35 @@ def remove_duplicates(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return df.drop_duplicates().copy(), duplicate_count
 
 
+def clean_dataframe(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
+    """Run deterministic cleaning over an in-memory raw SBA DataFrame."""
+    cleaned = standardize_column_names(df.copy())
+    cleaned = trim_whitespace(cleaned)
+    cleaned = replace_empty_strings_with_nulls(cleaned)
+    cleaned = add_derived_columns(cleaned)
+    cleaned, duplicate_count = remove_duplicates(cleaned)
+    cleaned = convert_numeric_columns(cleaned, NUMERIC_COLUMNS)
+    cleaned = convert_date_columns(cleaned, DATE_COLUMNS)
+    cleaned = normalize_contract_categories(cleaned)
+    return cleaned, duplicate_count
+
+
 def build_data_quality_summary(df: pd.DataFrame, duplicate_count: int) -> dict[str, Any]:
     """Assemble a simple data quality summary for logging."""
     null_percentages = (df.isna().mean().mul(100).round(2)).sort_values(ascending=False)
     numeric_columns = df.select_dtypes(include=["number"]).columns
     numeric_stats = (
-        df[numeric_columns].describe().transpose().round(2) if len(numeric_columns) > 0 else pd.DataFrame()
+        df[numeric_columns].describe().transpose().round(2)
+        if len(numeric_columns) > 0
+        else pd.DataFrame()
     )
-    summary = {
+    return {
         "row_count": len(df),
         "column_count": len(df.columns),
         "duplicate_rows_removed": duplicate_count,
         "null_percentages": null_percentages,
         "numeric_stats": numeric_stats,
     }
-    return summary
 
 
 def log_data_quality_summary(summary: dict[str, Any]) -> None:
@@ -279,7 +301,7 @@ def log_data_quality_summary(summary: dict[str, Any]) -> None:
 
 def save_clean_dataset(df: pd.DataFrame, output_path: Path = CLEAN_OUTPUT_PATH) -> Path:
     """Save the cleaned dataset to the processed directory."""
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False, date_format="%Y-%m-%d")
     LOGGER.info("Saved cleaned dataset to %s", output_path)
     return output_path
@@ -295,18 +317,11 @@ def clean_dataset() -> Path:
         )
         raise FileNotFoundError(message)
 
-    df = load_raw_files(raw_files)
-    df = standardize_column_names(df)
-    df = trim_whitespace(df)
-    df = replace_empty_strings_with_nulls(df)
-    df = add_derived_columns(df)
-    df, duplicate_count = remove_duplicates(df)
-    df = convert_numeric_columns(df, NUMERIC_COLUMNS)
-    df = convert_date_columns(df, DATE_COLUMNS)
-
-    summary = build_data_quality_summary(df, duplicate_count)
+    raw_df = load_raw_files(raw_files)
+    cleaned_df, duplicate_count = clean_dataframe(raw_df)
+    summary = build_data_quality_summary(cleaned_df, duplicate_count)
     log_data_quality_summary(summary)
-    return save_clean_dataset(df)
+    return save_clean_dataset(cleaned_df)
 
 
 def main() -> None:
