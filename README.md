@@ -16,6 +16,7 @@ The project currently reports **467,294 cleaned loan records** across SBA 7(a) a
 - **Case study:** [`docs/CASE_STUDY.md`](docs/CASE_STUDY.md)
 - **Data dictionary:** [`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md)
 - **Engineering roadmap:** [`docs/ENGINEERING_ROADMAP.md`](docs/ENGINEERING_ROADMAP.md)
+- **Model card:** [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md)
 
 ## What this project demonstrates
 
@@ -137,6 +138,26 @@ python -m src.quality \
 
 The command returns a non-zero exit code when error-level contract violations are present.
 
+## Charge-off risk baseline (research)
+
+The `ml/` package trains a leakage-safe charge-off baseline — regularized
+logistic regression plus a shallow random forest — using only approval-time
+features, with a temporal train/validation/test split by approval fiscal year.
+The feature allowlist, hard leakage denylist, target definition, and
+limitations are documented in [`docs/MODEL_CARD.md`](docs/MODEL_CARD.md).
+
+```bash
+python -m pip install -e ".[dev,ml]"
+python -m ml.train --input data/processed/sba_loans_clean.csv
+```
+
+Evaluation artifacts (`artifacts/model_metrics.json`, `threshold_table.csv`,
+`feature_effects.csv`, `calibration.csv`) are generated locally and are not
+committed. No real-data metrics are published until they have been generated
+from the actual cleaned FOIA extract; the test suite exercises the pipeline on
+synthetic data to prove mechanics only. This baseline is analytical research
+and must not be used for credit decisions.
+
 ## Full PostgreSQL workflow
 
 Install the runtime dependencies:
@@ -179,7 +200,13 @@ SBA-Analysis/
 ├── docs/
 │   ├── CASE_STUDY.md
 │   ├── DATA_DICTIONARY.md
-│   └── ENGINEERING_ROADMAP.md
+│   ├── ENGINEERING_ROADMAP.md
+│   └── MODEL_CARD.md
+├── ml/
+│   ├── features.py
+│   ├── split.py
+│   ├── train.py
+│   └── evaluate.py
 ├── scripts/
 │   └── run_sample_pipeline.py
 ├── sql/
@@ -197,7 +224,11 @@ SBA-Analysis/
 │   ├── fixtures/sba_sample_raw.csv
 │   ├── test_clean.py
 │   ├── test_contracts.py
-│   └── test_quality.py
+│   ├── test_quality.py
+│   ├── test_ml_features.py
+│   ├── test_ml_leakage.py
+│   ├── test_ml_metrics.py
+│   └── test_ml_split.py
 ├── pyproject.toml
 ├── requirements.txt
 └── README.md

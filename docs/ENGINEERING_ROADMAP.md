@@ -28,15 +28,16 @@ A clean run over a small included fixture must produce deterministic output and 
 Build an honest predictive baseline that demonstrates statistical modeling without presenting the project as a production underwriting system.
 
 ### Build
-- `ml/features.py`: use only fields available at approval time.
-- `ml/train.py`: temporal train/validation/test split by approval fiscal year.
+- `ml/features.py`: explicit approval-time allowlist, hard leakage denylist, and target derivation.
+- `ml/split.py`: temporal train/validation/test split by approval fiscal year.
+- `ml/train.py`: preprocessing, both baseline models, and the `python -m ml.train` entry point.
 - `ml/evaluate.py`: ROC-AUC, PR-AUC, Brier score, calibration, confusion matrix, and threshold table.
 - Baseline models: regularized logistic regression and one tree-based model.
 - Handle imbalance with class weighting; do not oversample across time splits.
 - Explicitly exclude leakage fields such as charge-off amount/date, paid-in-full date, and post-outcome status.
-- `artifacts/metrics.json`, `artifacts/feature_importance.csv`, and reproducible plots.
+- `artifacts/model_metrics.json`, `artifacts/threshold_table.csv`, `artifacts/feature_effects.csv`, and `artifacts/calibration.csv` (generated, not committed).
 - `docs/MODEL_CARD.md`: target, population, features, exclusions, intended use, limitations, bias risks, and non-use for lending decisions.
-- Unit tests proving leakage columns cannot enter the feature matrix.
+- Unit tests proving leakage columns cannot enter the feature matrix (`tests/test_ml_leakage.py`).
 
 ### Done when
 - One command trains and evaluates from the documented dataset.
