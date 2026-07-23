@@ -7,9 +7,10 @@ fields that should not be necessary for recruiter-facing analysis.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import date
-from typing import Any, Iterable
+from typing import Any
 
 import pandas as pd
 

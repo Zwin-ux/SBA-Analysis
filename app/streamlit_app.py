@@ -75,7 +75,7 @@ def get_database_url() -> str:
         database_url = os.getenv("DATABASE_URL")
 
     if not database_url:
-        raise EnvironmentError("DATABASE_URL is not set.")
+        raise OSError("DATABASE_URL is not set.")
 
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql+psycopg2://", 1)
@@ -824,7 +824,7 @@ def run_data_chat(question: str) -> dict[str, Any]:
     """Generate SQL from a natural-language question and execute it safely."""
     api_key = get_openai_api_key()
     if not api_key:
-        raise EnvironmentError("OPENAI_API_KEY is not set.")
+        raise OSError("OPENAI_API_KEY is not set.")
 
     model = get_openai_model()
     prompt = build_sql_generation_prompt(question)
