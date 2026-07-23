@@ -1,0 +1,6 @@
+AsOfDate,Program,L2LocID,BorrName,BorrState,GrossApproval,SBAGuaranteedApproval,ApprovalDate,ApprovalFiscalYear,FirstDisbursementDate,NAICSCode,NAICSDescription,LoanStatus,GrossChargeOffAmount,JobsSupported,BankName,ProjectState,InitialInterestRate,TermInMonths
+2025-12-31,7a,1001,"  Sunrise Bakery  ",ca,"$250,000","$187,500",2020-01-15,2020,2020-01-20,311811,Retail Bakeries,PIF,$0,8,Community Bank,ca,6.5%,120
+2025-12-31,7a,1001,"  Sunrise Bakery  ",ca,"$250,000","$187,500",2020-01-15,2020,2020-01-20,311811,Retail Bakeries,PIF,$0,8,Community Bank,ca,6.5%,120
+2025-12-31,504,1002,Precision Works,TX,"1,200,000","480,000",2019-05-01,2019,2019-05-10,332710,Machine Shops,CHGOFF,"125,000",24,Regional CDC Bank,TX,5.25,240
+2025-12-31,"7 (a)",1003,Neighborhood Childcare,ny,150000,127500,2021-09-15,2021,2021-09-17,624410,Child Day Care Services,CANCLD,,0,Metro Lender,NY,7.0,84
+2025-12-31,cdc/504,1004,Green Energy Installers,OR,750000,300000,2022-02-08,2022,2022-02-15,238220,Plumbing Heating and Air-Conditioning Contractors,PIF,0,12,Northwest CDC,OR,4.75,180
