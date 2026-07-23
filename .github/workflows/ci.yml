@@ -14,46 +14,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Data quality / Python ${{ matrix.python-version }}
+  compile:
+    name: Compile / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m compileall -q src tests scripts
+
+  tests:
+    name: Tests / Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-
-      - name: Install data-quality test dependencies
+      - name: Install test dependencies
         run: >-
-          python -m pip install --upgrade pip
-          && python -m pip install
+          python -m pip install
           "pandas==2.3.3"
           "pytest>=8.3,<9"
           "pytest-cov>=6,<7"
+      - run: python -m pytest
 
-      - name: Compile source
-        run: python -m compileall -q src tests scripts
-
-      - name: Unit tests
-        run: python -m pytest
-
-      - name: Public fixture pipeline
-        run: python scripts/run_sample_pipeline.py
-
-      - name: Upload sample evidence
-        if: always()
-        uses: actions/upload-artifact@v4
+  sample-pipeline:
+    name: Public sample pipeline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          name: sba-quality-evidence-py${{ matrix.python-version }}
-          path: artifacts/
-          if-no-files-found: error
+          python-version: "3.11"
+          cache: pip
+      - run: python -m pip install "pandas==2.3.3"
+      - run: python scripts/run_sample_pipeline.py
