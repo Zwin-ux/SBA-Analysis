@@ -12,4 +12,4 @@ The first fixture should cover:
 - active, paid-in-full, and charged-off outcomes;
 - records from multiple states, years, and NAICS sectors.
 
-Do not copy borrower names, addresses, contact information, credentials, or proprietary AmPac data into test fixtures.
+Do not copy borrower names, addresses, contact information, credentials, or any private or proprietary data into test fixtures.

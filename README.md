@@ -167,8 +167,15 @@ Run the pipeline:
 
 ```text
 SBA-Analysis/
+├── .devcontainer/
+│   └── devcontainer.json
+├── .github/
+│   └── workflows/ci.yml
 ├── app/
 │   └── streamlit_app.py
+├── data/
+│   ├── raw/          # FOIA extracts (not committed)
+│   └── processed/    # cleaned output (not committed)
 ├── docs/
 │   ├── CASE_STUDY.md
 │   ├── DATA_DICTIONARY.md
@@ -186,8 +193,10 @@ SBA-Analysis/
 │   ├── quality.py
 │   └── transform.py
 ├── tests/
+│   ├── conftest.py
 │   ├── fixtures/sba_sample_raw.csv
 │   ├── test_clean.py
+│   ├── test_contracts.py
 │   └── test_quality.py
 ├── pyproject.toml
 ├── requirements.txt

@@ -10,10 +10,10 @@ A clean run over a small included fixture must produce deterministic output and 
 ### Build
 - `src/contracts.py`: canonical columns, dtypes, nullable rules, valid ranges, and category normalization.
 - `src/quality.py`: row counts, duplicates, null rates, invalid ranges, category drift, and program coverage.
-- `tests/fixtures/sba_sample.csv`: synthetic/de-identified sample covering 7(a), 504, missing values, duplicates, currency strings, invalid dates, and charge-offs.
-- `tests/test_clean.py`: column aliases, numeric parsing, date parsing, trimming, deduplication, and derived lender behavior.
-- `tests/test_quality.py`: quality thresholds and JSON report shape.
-- `tests/test_metrics.py`: reproduce a small set of dashboard aggregates from the fixture.
+- `tests/fixtures/sba_sample_raw.csv`: synthetic sample covering 7(a), 504, missing values, duplicates, currency strings, and charge-offs.
+- `tests/test_clean.py`: column aliases, numeric parsing, date parsing, trimming, deduplication, derived lender behavior, and pipeline determinism.
+- `tests/test_contracts.py`: contract violation codes, severity levels, and program alias normalization.
+- `tests/test_quality.py`: quality thresholds, JSON report shape, and CLI exit codes.
 - `pyproject.toml`: pytest, coverage, Ruff, and project configuration.
 
 ### Done when
@@ -82,5 +82,5 @@ Make every portfolio claim independently verifiable.
 ### Done when
 - CI is green from a public clone.
 - The live app and demo-mode app both work.
-- No secrets, proprietary AmPac data, or oversized raw datasets are committed.
+- No secrets, private or proprietary data, or oversized raw datasets are committed.
 - The README links to generated evidence rather than unsupported claims.
