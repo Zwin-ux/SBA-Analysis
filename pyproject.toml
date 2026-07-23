@@ -1,0 +1,38 @@
+[project]
+name = "sba-capital-watch"
+version = "0.1.0"
+description = "Reproducible analytics and data-quality tooling for public SBA loan data."
+requires-python = ">=3.11"
+dependencies = [
+  "pandas==2.3.3",
+  "sqlalchemy==2.0.48",
+  "psycopg2-binary==2.9.11",
+  "streamlit==1.55.0",
+  "python-dotenv==1.2.2",
+  "plotly==6.6.0",
+  "altair<6",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-cov>=6,<7",
+  "ruff>=0.11,<1",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q --strict-markers --disable-warnings --cov=src --cov-report=term-missing"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = ["data", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
