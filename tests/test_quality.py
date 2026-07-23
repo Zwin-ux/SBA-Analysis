@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pandas as pd
+import pytest
 
 from src.quality import dataset_fingerprint, evaluate_quality, main
 
@@ -51,6 +52,34 @@ def test_fingerprint_is_deterministic(cleaned_sample: pd.DataFrame) -> None:
     assert dataset_fingerprint(cleaned_sample) == dataset_fingerprint(cleaned_sample.copy())
 
 
+def test_fingerprint_changes_when_data_changes(cleaned_sample: pd.DataFrame) -> None:
+    modified = cleaned_sample.copy()
+    modified.loc[modified.index[0], "loan_amount"] = 999_999.0
+
+    assert dataset_fingerprint(modified) != dataset_fingerprint(cleaned_sample)
+
+
+def test_null_rate_threshold_violation(cleaned_sample: pd.DataFrame) -> None:
+    sparse = cleaned_sample.copy()
+    sparse["loan_status"] = pd.array([pd.NA, pd.NA, pd.NA, "PIF"], dtype="string")
+
+    report = evaluate_quality(sparse)
+
+    assert report["status"] == "fail"
+    assert "NULL_RATE_EXCEEDED" in violation_codes(report)
+
+
+def test_charge_off_before_approval_detected(cleaned_sample: pd.DataFrame) -> None:
+    invalid = cleaned_sample.copy()
+    invalid["charge_off_date"] = pd.NaT
+    invalid.loc[invalid.index[0], "charge_off_date"] = pd.Timestamp("1999-01-01")
+
+    report = evaluate_quality(invalid)
+
+    assert report["status"] == "fail"
+    assert "CHARGE_OFF_BEFORE_APPROVAL" in violation_codes(report)
+
+
 def test_cli_writes_json_and_returns_success(
     cleaned_sample: pd.DataFrame,
     tmp_path,
@@ -65,3 +94,26 @@ def test_cli_writes_json_and_returns_success(
     assert exit_code == 0
     assert report["status"] == "pass"
     assert len(report["dataset"]["fingerprint_sha256"]) == 64
+
+
+def test_cli_returns_failure_on_contract_violations(
+    cleaned_sample: pd.DataFrame,
+    tmp_path,
+) -> None:
+    invalid = cleaned_sample.copy()
+    invalid["loan_amount"] = -1.0
+    input_path = tmp_path / "invalid.csv"
+    output_path = tmp_path / "quality.json"
+    invalid.to_csv(input_path, index=False)
+
+    exit_code = main(["--input", str(input_path), "--output", str(output_path)])
+    report = json.loads(output_path.read_text(encoding="utf-8"))
+
+    assert exit_code == 1
+    assert report["status"] == "fail"
+    assert "BELOW_MINIMUM" in violation_codes(report)
+
+
+def test_cli_raises_when_input_is_missing(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError):
+        main(["--input", str(tmp_path / "missing.csv"), "--output", str(tmp_path / "out.json")])
