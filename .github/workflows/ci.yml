@@ -15,7 +15,10 @@ concurrency:
 jobs:
   data-quality:
     name: Data quality foundation
-    runs-on: ubuntu-latest
+    # CI_RUNNER repo variable switches to the self-hosted runner while
+    # GitHub-hosted minutes are blocked by account billing; delete the
+    # variable to return to ubuntu-latest.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 15
 
     steps:
@@ -26,7 +29,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: pip
 
       - name: Install focused test dependencies
         run: >-
