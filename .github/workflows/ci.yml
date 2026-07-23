@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "portfolio/**"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sba-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install project and development tools
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src tests scripts
+
+      - name: Format check
+        run: ruff format --check src tests scripts
+
+      - name: Unit tests
+        run: python -m pytest
+
+      - name: Public fixture pipeline
+        run: python scripts/run_sample_pipeline.py
+
+      - name: Upload sample evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sba-quality-evidence-py${{ matrix.python-version }}
+          path: artifacts/
+          if-no-files-found: error
