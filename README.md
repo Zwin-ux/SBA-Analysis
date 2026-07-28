@@ -1,133 +1,89 @@
 # SBA Capital Watch
 
-Created by Mazen Zwin.
+A public-data pipeline and dashboard for understanding where SBA-backed capital goes, which industries depend on it, and where charge-off stress appears.
 
-<img width="1917" height="871" alt="image" src="https://github.com/user-attachments/assets/671d73f8-5d38-4100-95bd-6c5ee103b0c3" />
+<img width="100%" alt="SBA Capital Watch funding overview dashboard" src="https://github.com/user-attachments/assets/671d73f8-5d38-4100-95bd-6c5ee103b0c3" />
 
+<img width="100%" alt="SBA Capital Watch industry and charge-off analysis" src="https://github.com/user-attachments/assets/4fb06260-d856-4c69-ba5b-b95af2ac35b8" />
 
-<img width="1913" height="862" alt="image" src="https://github.com/user-attachments/assets/4fb06260-d856-4c69-ba5b-b95af2ac35b8" />
+[Open the Streamlit dashboard](https://appapppy-noirldcwsrzrbeqqfaeuqt.streamlit.app/) · The free deployment may need to wake after inactivity.
 
+## The engineering work
 
-SBA Capital Watch is a data engineering and analytics project built around public SBA 7(a) and 504 FOIA loan data. The goal was to take large, messy public loan extracts and turn them into a clean analytical workflow: inspect raw data, standardize it, load it into PostgreSQL, build reusable SQL views, and surface the results in an interactive Streamlit dashboard.
-
-This repo is organized to show both the engineering side and the analytical side of the project. It is meant to be readable, reproducible, and easy to walk through in an interview or recruiter review.
-
-## Live App
-
-- Streamlit deployment: [appapppy-noirldcwsrzrbeqqfaeuqt.streamlit.app](https://appapppy-noirldcwsrzrbeqqfaeuqt.streamlit.app/)
-
-## Project Summary
-
-- Built a Python data pipeline for SBA loan analysis
-- Combined raw 7(a) and 504 FOIA datasets into one cleaned analytical dataset
+- Standardized and combined public SBA 7(a) and 504 FOIA extracts
 - Loaded `467,294` cleaned loan records into PostgreSQL
-- Created SQL views for state funding, industry funding, loan status, and jobs-per-dollar analysis
-- Built a Streamlit dashboard with interactive filters for state, year, and industry
+- Kept ingestion, cleaning, loading, and analytical transformations as separate Python stages
+- Built reusable SQL views for state funding, industry funding, loan status, and jobs-per-dollar analysis
+- Served the views through a filterable Streamlit dashboard
 
-##  Questions I asked before  that require this type of analysis
-
-1. Which states receive the most SBA funding?
-2. Which industries rely most on SBA-backed loans?
-3. Which sectors show the strongest signs of charge-off risk?
-
-## Key Findings worth noting!!!!
-
-Using the combined cleaned dataset:
-
-- Top states by total SBA funding:
-  - California: `$38.82B`
-  - Texas: `$22.61B`
-  - Florida: `$17.77B`
-  - New York: `$10.24B`
-  - Georgia: `$9.74B`
-
-- Industries with the heaviest SBA dependence by funded dollars:
-  - Hotels (except Casino Hotels) and Motels: `$17.75B`
-  - Full-Service Restaurants: `$8.64B`
-  - Limited-Service Restaurants: `$5.65B`
-  - Child Day Care Services: `$5.11B`
-  - Offices of Dentists: `$4.79B`
-
-- Sectors with the strongest charge-off stress:
-  - Accommodation and Food Services: `4.12%` charge-off rate by funded dollars, about `$1.65B` charged off
-  - Arts, Entertainment, and Recreation: `3.31%`
-  - Manufacturing: `2.94%`
-  - Real Estate and Rental and Leasing: `2.42%`
-  - Retail Trade: `2.36%`
-
-## Tech Stack
-
-- Python 3.11
-- pandas
-- SQLAlchemy
-- psycopg2
-- PostgreSQL
-- Streamlit
-- python-dotenv
-
-## Repository Structure
-
-```text
-sba-capital-watch/
-|-- app/
-|   `-- streamlit_app.py
-|-- data/
-|   |-- raw/
-|   `-- processed/
-|-- docs/
-|   `--
-|-- sql/
-|   |-- schema.sql
-|   `-- views.sql
-|-- src/
-|   |-- ingest.py
-|   |-- clean.py
-|   |-- load.py
-|   `-- transform.py
-|-- Analysis.pdf
-|-- README.md
-`-- requirements.txt
+```mermaid
+flowchart LR
+    A[Public SBA CSV extracts] --> B[Inspect and ingest]
+    B --> C[Clean and standardize]
+    C --> D[(PostgreSQL)]
+    D --> E[Analytical SQL views]
+    E --> F[Streamlit dashboard]
 ```
 
-## Pipeline Flow
+## Questions the product answers
 
-1. `src/ingest.py` reads the raw SBA CSV files, logs schema information, and creates preview files.
-2. `src/clean.py` standardizes column names, removes duplicates, trims whitespace, converts numeric and date fields, and writes a cleaned CSV.
-3. `src/load.py` initializes PostgreSQL from `sql/schema.sql` and loads the cleaned dataset into the `loans` table in chunks.
-4. `src/transform.py` creates analytical views from `sql/views.sql`.
-5. `app/streamlit_app.py` serves the dashboard using SQL queries against PostgreSQL.
+1. Which states receive the most SBA-backed funding?
+2. Which industries depend most on SBA programs?
+3. Which sectors show the strongest charge-off stress?
+4. How do the answers change by year, state, and industry?
 
+## Selected findings
 
+| Signal | Result |
+| --- | --- |
+| Largest state total | California, `$38.82B` |
+| Next-largest state totals | Texas, `$22.61B`; Florida, `$17.77B` |
+| Largest industry total | Hotels and motels, `$17.75B` |
+| Highest highlighted sector charge-off rate | Accommodation and Food Services, `4.12%` by funded dollars |
+| Records in the analytical database | `467,294` |
 
-## Running Locally
+These are descriptive results from the project dataset, not a claim about current program performance.
 
-Create and use the virtual environment:
+## What to review
+
+- `src/ingest.py` — source inspection and preview generation
+- `src/clean.py` — schema normalization, deduplication, type conversion, and cleaned output
+- `src/load.py` — chunked PostgreSQL loading
+- `src/transform.py` — analytical view creation
+- `sql/schema.sql` and `sql/views.sql` — database contract and reusable analysis
+- `app/streamlit_app.py` — dashboard queries, filters, and presentation
+
+## Stack
+
+Python 3.11 · pandas · SQLAlchemy · PostgreSQL · Streamlit
+
+## Run locally
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-Set the database connection in `.env`:
+Create `.env`:
 
 ```env
 DATABASE_URL=postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/sba_capital_watch
 ```
 
-Run the full pipeline:
+Run the pipeline:
 
 ```powershell
 .\.venv\Scripts\python.exe src\ingest.py
 .\.venv\Scripts\python.exe src\clean.py
 .\.venv\Scripts\python.exe src\load.py
 .\.venv\Scripts\python.exe src\transform.py
-.\.venv\Scripts\python.exe -m streamlit run app/streamlit_app.py
+.\.venv\Scripts\python.exe -m streamlit run app\streamlit_app.py
 ```
 
-## Deployment Note
+## Authorship
 
-The deployed app uses a remote PostgreSQL database and reads `DATABASE_URL` from Streamlit secrets. The local development version can continue using `.env`.
+Built by Mazen Zwin. AI tools assisted implementation; the dataset choice, analytical framing, pipeline structure, interpretation, and product decisions are mine.
 
-## Notes on Authorship
+## License
 
-OpenAI tools were used to support coding and implementation work. The project direction, dataset choice, analytical framing, interpretation of findings, and final presentation decisions were done by Mazen Zwin.
+[MIT](LICENSE)
